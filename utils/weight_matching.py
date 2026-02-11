@@ -85,8 +85,11 @@ class WeightMatching(object):
                             A += coeff * torch.matmul(w_t, w_s.transpose(0, 1)) / (torch.norm(w_t) * torch.norm(w_s))
                         else:
                             A += coeff * torch.matmul(w_t, w_s.transpose(0, 1))
-
-                ri, ci = linear_sum_assignment(A.numpy(force=True), maximize=True)
+                # ri, ci = linear_sum_assignment(-A.detach().cpu().numpy()) 
+                # --> cause erreur étape 2 fig5a MNIST : 
+                # torch.Tensor.numpy() n’accepte pas force=True avec la version de PyTorch du Docker, donc je convertis explicitement en NumPy via detach().cpu().numpy().
+                # Use a CPU numpy array for SciPy; torch.Tensor.numpy() has no keyword args.
+                ri, ci = linear_sum_assignment(A.detach().cpu().numpy(), maximize=True)
                 assert (ri == np.arange(len(ri))).all()
 
                 I_n = torch.eye(n).to(self.device)

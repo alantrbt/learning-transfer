@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+
+# Project outputs and sync
+__outputs__/
+__sync__/
+
+# Large artifacts
+*.pth
+*.pt
+*.ckpt
+*.prefix
+*.npz
+*.npy
+
+# Logs
+*.log
