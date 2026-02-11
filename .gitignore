@@ -14,7 +14,7 @@ ENV/
 
 # Jupyter
 .ipynb_checkpoints/
-.ipynb/
+*.ipynb/
 
 # OS / editor
 .DS_Store
