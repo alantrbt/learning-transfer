@@ -1,3 +1,5 @@
+import glob
+import os
 import matplotlib.pyplot as plt
 from utils.output_manager import OutputManager
 import statistics as stats
@@ -43,6 +45,17 @@ def load_data(output_dir, json_name, exp_name, prefix_list,
     }
     return data
 
+def get_prefixes(output_dir, exp_name, json_name):
+    pattern = os.path.join(output_dir, exp_name, f"*.{json_name}.json")
+    matches = sorted(glob.glob(pattern))
+    suffix = f".{json_name}.json"
+    prefixes = [os.path.basename(p)[:-len(suffix)] for p in matches]
+    if not prefixes:
+        raise FileNotFoundError(
+            f"No {json_name}.json found for {exp_name} under {os.path.join(output_dir, exp_name)}"
+        )
+    return prefixes
+
 def section_4_1_mnist_mlp(cfg, outman, prefix, gpu_id):
     datas = []
 
@@ -51,10 +64,7 @@ def section_4_1_mnist_mlp(cfg, outman, prefix, gpu_id):
     label = 'Oracle Transfer'
     color = 'C3'
     linestyle = '-.'
-    prefix_list = ["17ea8ed13d1cdd8f5ba65a53ba81a727",
-                    "52217d5945a5bcdd0541acf6ff69f904",
-                    "bc3e18fb4600758e3af2d0640913f36d",
-                    ]
+    prefix_list = get_prefixes(cfg['output_dir'], exp_name, 'transfer_results')
     data = load_data(cfg['output_dir'], 'transfer_results', exp_name, prefix_list, color=color, label=label, linestyle=linestyle)
     datas.append(data)
 
@@ -62,10 +72,7 @@ def section_4_1_mnist_mlp(cfg, outman, prefix, gpu_id):
     label = 'Naive Transfer'
     color = 'C1'
     linestyle = '-'
-    prefix_list = ["17ea8ed13d1cdd8f5ba65a53ba81a727",
-                    "52217d5945a5bcdd0541acf6ff69f904",
-                    "bc3e18fb4600758e3af2d0640913f36d",
-                    ]
+    prefix_list = get_prefixes(cfg['output_dir'], exp_name, 'transfer_results')
     data = load_data(cfg['output_dir'], 'transfer_results', exp_name, prefix_list, color=color, label=label, linestyle=linestyle)
     datas.append(data)
 
@@ -73,9 +80,7 @@ def section_4_1_mnist_mlp(cfg, outman, prefix, gpu_id):
     label = 'GMT Transfer'
     color = 'C0'
     linestyle = '-'
-    prefix_list = ['8b6e62525ee21be2959f0ccec5a76d33',
-                        '130d6067b38b2eba7ed01c591f9cd62d',
-                        '9cd32cb72b9c7f9ec173b1ad0b9c9c6d',]
+    prefix_list = get_prefixes(cfg['output_dir'], exp_name, 'transfer_results')
     data = load_data(cfg['output_dir'], 'transfer_results', exp_name, prefix_list, color=color, label=label, linestyle=linestyle)
     datas.append(data)
 
@@ -83,10 +88,7 @@ def section_4_1_mnist_mlp(cfg, outman, prefix, gpu_id):
     label = 'FGMT Transfer'
     color = 'C2'
     linestyle = '-'
-    prefix_list = ['d9aa55300e97ec996c3704a4c8cccefb',
-                    'f4dd87f4032d251d4ee7d6477361054d',
-                    'e380fa12a2843cbdb66d0541ff75c289',
-                    ]
+    prefix_list = get_prefixes(cfg['output_dir'], exp_name, 'transfer_results')
     data = load_data(cfg['output_dir'], 'transfer_results', exp_name, prefix_list, color=color, label=label, linestyle=linestyle)
     datas.append(data)
     # ====================
