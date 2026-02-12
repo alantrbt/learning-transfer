@@ -1,0 +1,20 @@
+{
+  "name": "learning-transfer (CPU)",
+  "build": {
+    "dockerfile": "../../Dockerfile",
+    "context": "../.."
+  },
+  "remoteUser": "docker",
+  "workspaceFolder": "/workspace",
+  "workspaceMount": "source=${localWorkspaceFolder}/..,target=/workspace,type=bind",
+  "runArgs": [],
+  "postCreateCommand": "cd /workspace && python3.8 -m pip install -q jupyter",
+  "customizations": {
+    "vscode": {
+      "extensions": ["ms-python.python", "ms-python.vscode-pylance", "ms-toolsai.jupyter"],
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/bin/python3.8"
+      }
+    }
+  }
+}

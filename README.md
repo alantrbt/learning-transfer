@@ -17,4 +17,38 @@ python exec_parallel.py <command> <exp_name>
 - `<exp_name>` is one of the keys defined in the `config.yaml`.
 - The command sequentially runs each experiment over the grid specified by the `hparams_grid` option in `config.yaml`. It can sweep the grid efficiently if we execute the command multiple times in parallel.
 
+## Development Environment
+
+This repository provides two Dev Container configurations for flexible development setup:
+
+### GPU Configuration (Default)
+
+**Location:** `.devcontainer/`
+
+**Requirements:**
+- NVIDIA GPU
+- NVIDIA Container Toolkit
+- Docker with GPU support
+
+**Setup:**
+```
+Ctrl+Shift+P → Dev Containers: Reopen in Container
+```
+
+### CPU Configuration
+
+**Location:** `devcontainer-cpu/.devcontainer/`
+
+**Requirements:**
+- Docker installed (works on any machine)
+
+**Setup:**
+```
+1. Open VS Code
+2. Press Ctrl+Shift+P
+3. Select "Dev Containers: Open Folder in Container…"
+4. Choose folder: devcontainer-cpu
+```
+
+**Note:** The container automatically mounts the project root inside `/workspace`.
 
