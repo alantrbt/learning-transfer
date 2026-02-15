@@ -123,7 +123,7 @@ resnet101:
 __default__: &__default__
 
     # General Setting
-    num_workers: 4
+    num_workers: 1
     use_cuda: True
     output_dir: '__outputs__'
     dataset_dir: '__data__'
@@ -226,7 +226,7 @@ imagenet_sgd: &imagenet_sgd
     <<: *__default__
     dataset.config_name: 'imagenet'
     model.config_name: null
-    num_workers: 8
+    num_workers: 2
 
     epoch: 100
     batch_size: 128
@@ -252,7 +252,7 @@ imagenet_resnet18_sgd: &imagenet_resnet18_sgd
     checkpoint_epochs: "list(range(-1, 100))"
 
     hparams_grid:
-        seed: [101, 102, 201, 202, 301, 302]
+        seed: [101]
 imagenet_resnet34_sgd: &imagenet_resnet34_sgd
     <<: *imagenet_sgd
     num_gpus: 1
@@ -262,7 +262,7 @@ imagenet_resnet34_sgd: &imagenet_resnet34_sgd
     checkpoint_epochs: "list(range(-1, 100))"
 
     hparams_grid:
-        seed: [101, 102, 201, 202, 301, 302]
+        seed: [101]
 
 imagenet_to_cars_resnet18_sgd: &imagenet_to_cars_resnet18_sgd
     <<: *imagenet_resnet18_sgd
@@ -285,7 +285,7 @@ imagenet_to_cars_resnet18_sgd: &imagenet_to_cars_resnet18_sgd
         #seed: [777]
         #seed_checkpoint: [101, 201, 301]
         seed: [888]
-        seed_checkpoint: [102, 202, 302]
+        seed_checkpoint: [102]
 
 imagenet_to_cub_resnet18_sgd: &imagenet_to_cub_resnet18_sgd
     <<: *imagenet_resnet18_sgd
@@ -306,9 +306,9 @@ imagenet_to_cub_resnet18_sgd: &imagenet_to_cub_resnet18_sgd
     hparams_grid:
         epoch: [30]
         seed: [777]
-        seed_checkpoint: [101, 201, 301]
+        seed_checkpoint: [101]
         #seed: [888]
-        #seed_checkpoint: [102, 202, 302]
+        #seed_checkpoint: [102]
 
 cifar10_conv8_sgd: &cifar10_conv8_sgd
     <<: *cifar10_sgd
@@ -321,7 +321,7 @@ cifar10_conv8_sgd: &cifar10_conv8_sgd
         epoch: [60]
         lr: [0.05]
         width_factor: [1.0]
-        seed: [101, 102, 103, 201, 202, 203, 301, 302, 303]
+        seed: [101]
 
 cifar10_to_cifar100-1_conv8_sgd: &cifar10_to_cifar100-1_conv8_sgd
     <<: *cifar10_conv8_sgd
@@ -343,10 +343,8 @@ cifar10_to_cifar100-1_conv8_sgd: &cifar10_to_cifar100-1_conv8_sgd
     hparams_grid:
         epoch: [30]
         lr: [0.05]
-        #seed: [777]
-        #seed_checkpoint: [101, 201, 301]
-        seed: [888]
-        seed_checkpoint: [102, 202, 302]
+        seed: [777, 888]
+        seed_checkpoint: [101]
 cifar100-1_conv8_sgd:
     <<: *cifar10_to_cifar100-1_conv8_sgd
     initialize_head: false
@@ -370,7 +368,7 @@ mnist_mlp_sgd: &mnist_mlp_sgd
     hparams_grid:
         lr: [0.01]
         width_factor: [64.0]  # dim=4096
-        seed: [101,102,201,202,301,302]
+        seed: [101]
 
 ########################################################
 #   Command: transfer
@@ -397,7 +395,7 @@ transfer_init-mnist_mlp: &transfer_init-mnist_mlp
         num_splits: [10]
         split_scheduling_fn: ['1+math.cos((t/T)*math.pi)']
         fast_perm_optim: [false]
-        source_target_seeds: [[101, 102], [201, 202], [301, 302]]
+        source_target_seeds: [[101, 102]]
 transfer_init-mnist_mlp_fast:
     <<: *transfer_init-mnist_mlp
     hparams_grid:
@@ -408,7 +406,7 @@ transfer_init-mnist_mlp_fast:
         num_splits: [10]
         split_scheduling_fn: ['1+math.cos((t/T)*math.pi)']
         fast_perm_optim: [true]
-        source_target_seeds: [[101, 102], [201, 202], [301, 302]]
+        source_target_seeds: [[101, 102]]
 transfer_init-mnist_mlp_noperm: &transfer_init-mnist_mlp_noperm
     <<: *transfer_init-mnist_mlp
     baseline_no_perm: true
@@ -418,7 +416,7 @@ transfer_init-mnist_mlp_noperm: &transfer_init-mnist_mlp_noperm
         lr_ft: [0.01]
         num_splits: [10]
         split_scheduling_fn: ['1+math.cos((t/T)*math.pi)']
-        source_target_seeds: [[101, 102], [201, 202], [301, 302]]
+        source_target_seeds: [[101, 102]]
 transfer_init-mnist_mlp_usetarget:
     <<: *transfer_init-mnist_mlp_noperm
     baseline_no_perm: false
@@ -450,7 +448,7 @@ transfer_init-cifar10_conv8: &transfer_init-cifar10_conv8
         checkpoint_epochs: [[-1, 59]]
         num_splits: [30]
         split_scheduling_fn: ['1+math.cos((t/T)*math.pi)']
-        source_target_seeds: [[101, 102], [201, 202], [301, 302]]
+        source_target_seeds: [[101, 102]]
 transfer_init-cifar10_conv8_fast:
     <<: *transfer_init-cifar10_conv8
     fast_perm_optim: true
@@ -473,7 +471,7 @@ transfer_init-cifar10_conv8_ablation_scheduling_uniform:
         num_splits: [30]
         split_scheduling_fn: [null]
         fast_perm_optim: [false]
-        source_target_seeds: [[101, 102], [201, 202], [301, 302]]
+        source_target_seeds: [[101, 102]]
 
 transfer_init-cifar10_conv8_ablation_linear:
     <<: *transfer_init-cifar10_conv8
@@ -486,7 +484,7 @@ transfer_init-cifar10_conv8_ablation_linear:
         num_splits: [60]
         split_scheduling_fn: ['1+math.cos((t/T)*math.pi)']
         fast_perm_optim: [false]
-        source_target_seeds: [[101, 102], [401, 402], [501, 502]]
+        source_target_seeds: [[101, 102]]
 transfer_init-cifar10_conv8_ablation_linear_fast:
     <<: *transfer_init-cifar10_conv8
     hparams_grid:
@@ -498,7 +496,7 @@ transfer_init-cifar10_conv8_ablation_linear_fast:
         num_splits: [60]
         split_scheduling_fn: ['1+math.cos((t/T)*math.pi)']
         fast_perm_optim: [true]
-        source_target_seeds: [[101, 102], [401, 402], [501, 502]]
+        source_target_seeds: [[101, 102]]
 transfer_init-cifar10_conv8_ablation_finegrained:
     <<: *transfer_init-cifar10_conv8
     hparams_grid:
@@ -510,7 +508,7 @@ transfer_init-cifar10_conv8_ablation_finegrained:
         num_splits: [1]
         split_scheduling_fn: ['1+math.cos((t/T)*math.pi)']
         fast_perm_optim: [false]
-        source_target_seeds: [[101, 102], [401, 402], [501, 502]]
+        source_target_seeds: [[101, 102]]
 transfer_init-cifar10_conv8_ablation_finegrained_fast:
     <<: *transfer_init-cifar10_conv8
     hparams_grid:
@@ -522,7 +520,7 @@ transfer_init-cifar10_conv8_ablation_finegrained_fast:
         num_splits: [1]
         split_scheduling_fn: ['1+math.cos((t/T)*math.pi)']
         fast_perm_optim: [true]
-        source_target_seeds: [[101, 102], [401, 402], [501, 502]]
+        source_target_seeds: [[101, 102]]
 
 transfer_cifar10-cifar100_conv8: &transfer_cifar10-cifar100_conv8
     <<: *transfer_init-cifar10_conv8
@@ -553,7 +551,7 @@ transfer_cifar10-cifar100_conv8: &transfer_cifar10-cifar100_conv8
         split_scheduling_fn: ['1+math.cos((t/T)*math.pi)']
         num_splits: [15]
 
-        source_target_seeds_pretrained: [[101, 102], [201, 202], [301, 302]]
+        source_target_seeds_pretrained: [[101, 102]]
 transfer_cifar10-cifar100_conv8_fast:
     <<: *transfer_cifar10-cifar100_conv8
     fast_perm_optim: true
@@ -593,7 +591,7 @@ transfer_init-imagenet_resnet18: &transfer_init-imagenet_resnet18
         num_splits: [30]
 
         split_scheduling_fn: ['1+math.cos((t/T)*math.pi)']
-        source_target_seeds: [[101, 102], [201, 202], [301, 302]]
+        source_target_seeds: [[101, 102]]
 transfer_init-imagenet_resnet18_fast:
     <<: *transfer_init-imagenet_resnet18
     fast_perm_optim: true
@@ -636,7 +634,7 @@ transfer_imagenet-cars_resnet18: &transfer_imagenet-cars_resnet18
         split_scheduling_fn: ['1+math.cos((t/T)*math.pi)']
         num_splits: [15]
 
-        source_target_seeds_pretrained: [[101, 102], [201, 202], [301, 302]]
+        source_target_seeds: [[101, 102]]
 transfer_imagenet-cars_resnet18_fast:
     <<: *transfer_imagenet-cars_resnet18
     fast_perm_optim: false
@@ -679,7 +677,7 @@ transfer_imagenet-cub_resnet18: &transfer_imagenet-cub_resnet18
         split_scheduling_fn: ['1+math.cos((t/T)*math.pi)']
         num_splits: [15]
 
-        source_target_seeds_pretrained: [[101, 102], [201, 202], [301, 302]]
+        source_target_seeds_pretrained: [[101, 102]]
 transfer_imagenet-cub_resnet18_fast:
     <<: *transfer_imagenet-cub_resnet18
     fast_perm_optim: false
@@ -770,5 +768,278 @@ section_4_3_cifar10_conv8:
         epoch: [0]
         lr: [0.0]
         width_factor: [1.0]
+        seed: [1]
+
+
+########################################################
+#   Figures 3 — Synced Transfer (online GMT)
+########################################################
+
+synced_transfer_init-mnist_mlp: &synced_transfer_init-mnist_mlp
+    <<: *mnist_mlp_sgd
+    allowed_commands: [synced_transfer]
+    checkpoint_epochs: [-1]
+    source_exp_name: mnist_mlp_sgd
+    source_hparams:
+        lr: 0.01
+        width_factor: 64.0
+        seed: 101
+    target_exp_name: mnist_mlp_sgd
+    target_hparams:
+        lr: 0.01
+        width_factor: 64.0
+        seed: 102
+    output_prefix_hashing: true
+    hparams_grid:
+        epoch: [10]
+        gm_iters: [1]
+        normalized_matching: [false]
+        num_perms: [1]
+        num_splits: [5]
+        wm_max_epoch: [null]
+        wm_max_iter: [500]
+        wm_use_prev_perm: [true]
+        fast_perm_optim: [false]
+        seed: [1]
+synced_transfer_init-mnist_mlp_random:
+    <<: *synced_transfer_init-mnist_mlp
+    use_random_perm: true
+
+synced_transfer_init-cifar10_conv8: &synced_transfer_init-cifar10_conv8
+    <<: *cifar10_conv8_sgd
+    allowed_commands: [synced_transfer]
+    checkpoint_epochs: [-1]
+    source_exp_name: cifar10_conv8_sgd
+    source_hparams:
+        epoch: 60
+        lr: 0.05
+        width_factor: 1.0
+        seed: 101
+    target_exp_name: cifar10_conv8_sgd
+    target_hparams:
+        epoch: 60
+        lr: 0.05
+        width_factor: 1.0
+        seed: 102
+    output_prefix_hashing: true
+    hparams_grid:
+        epoch: [60]
+        gm_iters: [1]
+        normalized_matching: [false]
+        num_perms: [1]
+        num_splits: [5]
+        wm_max_epoch: [null]
+        wm_max_iter: [500]
+        wm_use_prev_perm: [true]
+        fast_perm_optim: [false]
+        seed: [1]
+synced_transfer_init-cifar10_conv8_random:
+    <<: *synced_transfer_init-cifar10_conv8
+    use_random_perm: true
+
+synced_transfer_init-imagenet_resnet18: &synced_transfer_init-imagenet_resnet18
+    <<: *imagenet_resnet18_sgd
+    allowed_commands: [synced_transfer]
+    checkpoint_epochs: [-1]
+    source_exp_name: imagenet_resnet18_sgd
+    source_hparams:
+        seed: 101
+    target_exp_name: imagenet_resnet18_sgd
+    target_hparams:
+        seed: 102
+    output_prefix_hashing: true
+    hparams_grid:
+        epoch: [100]
+        gm_iters: [1]
+        normalized_matching: [false]
+        num_perms: [1]
+        num_splits: [5]
+        wm_max_epoch: [null]
+        wm_max_iter: [500]
+        wm_use_prev_perm: [true]
+        fast_perm_optim: [false]
+        seed: [1]
+synced_transfer_init-imagenet_resnet18_random:
+    <<: *synced_transfer_init-imagenet_resnet18
+    use_random_perm: true
+
+########################################################
+#   Figures 7 — Scratch training baselines
+########################################################
+
+cars_resnet18_sgd:
+    <<: *imagenet_to_cars_resnet18_sgd
+    initialize_head: false
+    load_checkpoint_by_hparams: null
+    hparams_grid:
+        epoch: [30]
+        seed: [777]
+
+cub_resnet18_sgd:
+    <<: *imagenet_to_cub_resnet18_sgd
+    initialize_head: false
+    load_checkpoint_by_hparams: null
+    hparams_grid:
+        epoch: [30]
+        seed: [777, 888]
+
+########################################################
+#   Figures 8 — ImageNet x0.1 width (ResNet-18)
+########################################################
+
+imagenet_resnet18_x0_1_sgd: &imagenet_resnet18_x0_1_sgd
+    <<: *imagenet_resnet18_sgd
+    width_factor: 0.1
+    hparams_grid:
+        seed: [101]
+
+imagenet_x0_1_to_cars_resnet18_sgd: &imagenet_x0_1_to_cars_resnet18_sgd
+    <<: *imagenet_to_cars_resnet18_sgd
+    width_factor: 0.1
+    load_checkpoint_by_hparams:
+        _exp_name: imagenet_resnet18_x0_1_sgd
+        seed: null
+    hparams_grid:
+        epoch: [30]
+        seed: [777, 888]
+        seed_checkpoint: [101]
+
+imagenet_x0_1_to_cub_resnet18_sgd: &imagenet_x0_1_to_cub_resnet18_sgd
+    <<: *imagenet_to_cub_resnet18_sgd
+    width_factor: 0.1
+    load_checkpoint_by_hparams:
+        _exp_name: imagenet_resnet18_x0_1_sgd
+        seed: null
+    hparams_grid:
+        epoch: [30]
+        seed: [777, 888]
+        seed_checkpoint: [101]
+
+transfer_imagenet_x0_1-cars_resnet18: &transfer_imagenet_x0_1-cars_resnet18
+    <<: *imagenet_x0_1_to_cars_resnet18_sgd
+    allowed_commands: [transfer]
+    source_exp_name: imagenet_x0_1_to_cars_resnet18_sgd
+    source_hparams:
+        epoch: 30
+        seed: 777
+        seed_checkpoint: null
+    target_exp_name: imagenet_x0_1_to_cars_resnet18_sgd
+    target_hparams_grid:
+        epoch: [30]
+        seed: [888]
+        seed_checkpoint: [null]
+    fast_perm_optim: false
+    hparams_grid:
+        epoch_ft: [10]
+        lr_ft: [0.0001]
+        optimizer_ft: ['AdamW']
+        lr_scheduler_ft: [null]
+        batch_size: [128]
+        bn_stats_iters: [2]
+        bn_stats_batch: [128]
+        gm_iters: [10]
+        checkpoint_epochs: [[-1, 29]]
+        split_scheduling_fn: ['1+math.cos((t/T)*math.pi)']
+        num_splits: [15]
+        source_target_seeds_pretrained: [[101, 102]]
+transfer_imagenet_x0_1-cars_resnet18_fast:
+    <<: *transfer_imagenet_x0_1-cars_resnet18
+    fast_perm_optim: true
+transfer_imagenet_x0_1-cars_resnet18_noperm: &transfer_imagenet_x0_1-cars_resnet18_noperm
+    <<: *transfer_imagenet_x0_1-cars_resnet18
+    baseline_no_perm: true
+transfer_imagenet_x0_1-cars_resnet18_usetarget:
+    <<: *transfer_imagenet_x0_1-cars_resnet18_noperm
+    baseline_no_perm: false
+    baseline_use_target: true
+
+transfer_imagenet_x0_1-cub_resnet18: &transfer_imagenet_x0_1-cub_resnet18
+    <<: *imagenet_x0_1_to_cub_resnet18_sgd
+    allowed_commands: [transfer]
+    source_exp_name: imagenet_x0_1_to_cub_resnet18_sgd
+    source_hparams:
+        epoch: 30
+        seed: 777
+        seed_checkpoint: null
+    target_exp_name: imagenet_x0_1_to_cub_resnet18_sgd
+    target_hparams_grid:
+        epoch: [30]
+        seed: [888]
+        seed_checkpoint: [null]
+    fast_perm_optim: false
+    hparams_grid:
+        epoch_ft: [10]
+        lr_ft: [0.0001]
+        optimizer_ft: ['AdamW']
+        lr_scheduler_ft: [null]
+        batch_size: [128]
+        bn_stats_iters: [2]
+        bn_stats_batch: [128]
+        gm_iters: [10]
+        checkpoint_epochs: [[-1, 29]]
+        split_scheduling_fn: ['1+math.cos((t/T)*math.pi)']
+        num_splits: [15]
+        source_target_seeds_pretrained: [[101, 102]]
+transfer_imagenet_x0_1-cub_resnet18_fast:
+    <<: *transfer_imagenet_x0_1-cub_resnet18
+    fast_perm_optim: true
+transfer_imagenet_x0_1-cub_resnet18_noperm: &transfer_imagenet_x0_1-cub_resnet18_noperm
+    <<: *transfer_imagenet_x0_1-cub_resnet18
+    baseline_no_perm: true
+transfer_imagenet_x0_1-cub_resnet18_usetarget:
+    <<: *transfer_imagenet_x0_1-cub_resnet18_noperm
+    baseline_no_perm: false
+    baseline_use_target: true
+
+########################################################
+#   Plot configs for Figures 3, 7, 8
+########################################################
+
+figure_3_mnist_mlp:
+    <<: *synced_transfer_init-mnist_mlp
+    allowed_commands: ['plot']
+    hparams_grid:
+        seed: [1]
+
+figure_3_cifar10_conv8:
+    <<: *synced_transfer_init-cifar10_conv8
+    allowed_commands: ['plot']
+    hparams_grid:
+        seed: [1]
+
+figure_3_imagenet_resnet18:
+    <<: *synced_transfer_init-imagenet_resnet18
+    allowed_commands: ['plot']
+    hparams_grid:
+        seed: [1]
+
+figure_7_cars:
+    <<: *transfer_imagenet-cars_resnet18
+    allowed_commands: ['plot']
+    hparams_grid:
+        seed: [1]
+
+figure_7_cifar100:
+    <<: *transfer_cifar10-cifar100_conv8
+    allowed_commands: ['plot']
+    hparams_grid:
+        seed: [1]
+
+figure_7_cub:
+    <<: *transfer_imagenet-cub_resnet18
+    allowed_commands: ['plot']
+    hparams_grid:
+        seed: [1]
+
+figure_8_imagenetx0_1_cars:
+    <<: *transfer_imagenet_x0_1-cars_resnet18
+    allowed_commands: ['plot']
+    hparams_grid:
+        seed: [1]
+
+figure_8_imagenetx0_1_cub:
+    <<: *transfer_imagenet_x0_1-cub_resnet18
+    allowed_commands: ['plot']
+    hparams_grid:
         seed: [1]
 

@@ -126,7 +126,8 @@ def section_4_2_imagenet_cars_resnet18(cfg, outman, prefix, gpu_id):
                 label=label, linewidth=linewidth, linestyle=linestyle,
                 marker=marker, markersize=markersize,
                 color=color)
-        ax.fill_between(xs, [y - s for y, s in zip(ys, devs)], [y + s for y, s in zip(ys, devs)], alpha=alpha, color=color)
+        # DISABLED: Shaded areas with single seed (no variance)
+        # ax.fill_between(xs, [y - s for y, s in zip(ys, devs)], [y + s for y, s in zip(ys, devs)], alpha=alpha, color=color)
 
     #ax.plot([x_min, x_max], [train_epoch_17, train_epoch_17], "black", linestyle='dashed', label='Source (epoch=17)')
     #ax.plot([x_min, x_max], [train_epoch_15, train_epoch_15], "black", linestyle='dotted', label='Source (epoch=15)')

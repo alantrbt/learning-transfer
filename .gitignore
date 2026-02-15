@@ -36,3 +36,6 @@ __data__/
 
 # Logs
 *.log
+
+# markdown
+*.md
