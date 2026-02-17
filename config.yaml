@@ -407,8 +407,8 @@ transfer_init-mnist_mlp_fast:
         epoch_ft: [3]
         lr_ft: [0.01]
         gm_iters: [1]
-        checkpoint_epochs: [[-1, 9]]
-        num_splits: [10]
+        checkpoint_epochs: [[-1, 14]]
+        num_splits: [5]
         split_scheduling_fn: ['1+math.cos((t/T)*math.pi)']
         fast_perm_optim: [true]
         source_target_seeds: [[101, 102]]
@@ -416,10 +416,10 @@ transfer_init-mnist_mlp_noperm: &transfer_init-mnist_mlp_noperm
     <<: *transfer_init-mnist_mlp
     baseline_no_perm: true
     hparams_grid:
-        checkpoint_epochs: [[-1, 9]]
+        checkpoint_epochs: [[-1, 14]]
         epoch_ft: [3]
         lr_ft: [0.01]
-        num_splits: [10]
+        num_splits: [5]
         split_scheduling_fn: ['1+math.cos((t/T)*math.pi)']
         source_target_seeds: [[101, 102]]
 transfer_init-mnist_mlp_usetarget:
@@ -775,6 +775,11 @@ section_4_3_cifar10_conv8:
         width_factor: [1.0]
         seed: [1]
 
+section_4_1_mnist_mlp_figure5a:
+    <<: *transfer_init-mnist_mlp
+    allowed_commands: ['plot']
+    hparams_grid:
+        seed: [1]
 
 ########################################################
 #   Figures 3 — Synced Transfer (online GMT)
