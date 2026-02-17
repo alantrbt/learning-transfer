@@ -14,6 +14,32 @@ import utils._weight_matching
 
 from utils.weight_matching import copy_named_parameters, WeightMatching
 
+def compute_cosine_similarity_dict(params1, params2):
+    """Compute cosine similarity between two parameter dictionaries.
+    
+    Args:
+        params1, params2: Dict of parameter tensors
+        
+    Returns:
+        float: Cosine similarity value
+    """
+    vec1_list = []
+    vec2_list = []
+    for k in params1.keys():
+        if k in params2:
+            vec1_list.append(params1[k].flatten())
+            vec2_list.append(params2[k].flatten())
+    
+    if not vec1_list:
+        return 0.0
+    
+    vec1 = torch.cat(vec1_list)
+    vec2 = torch.cat(vec2_list)
+    
+    # Compute cosine similarity
+    cos_sim = torch.nn.functional.cosine_similarity(vec1.unsqueeze(0), vec2.unsqueeze(0))
+    return cos_sim.item()
+
 def load_cfg(cfgs, exp_name, data_parallel=False, output_dir=None, force_restart=False):
     cfgs = copy.deepcopy(cfgs)
     cfg = cfgs[exp_name]
@@ -32,12 +58,22 @@ def synced_transfer(exp_name, cfg, gpu_id, prefix=''):
         outman.print(f'Prefix: {outman.preprocess_prefix(prefix)}', prefix=prefix)
 
     sc_exp_name = cfg['source_exp_name']
-    sc_hparams = cfg['source_hparams']
+    sc_hparams = copy.deepcopy(cfg['source_hparams'])
+    
+    # If width_factor is in the hparams grid, use it for source and target
+    if 'width_factor' in cfg and isinstance(cfg['width_factor'], (int, float)):
+        sc_hparams['width_factor'] = cfg['width_factor']
+    
     sc_cfg = load_cfg(cfgs, sc_exp_name, cfg['data_parallel'], cfg['output_dir'], False)
     sc_outman = OutputManager(cfg['output_dir'], sc_exp_name, sc_cfg['output_prefix_hashing'])
 
     tg_exp_name = cfg['target_exp_name']
-    tg_hparams = cfg['target_hparams']
+    tg_hparams = copy.deepcopy(cfg['target_hparams'])
+    
+    # If width_factor is in the hparams grid, use it for source and target
+    if 'width_factor' in cfg and isinstance(cfg['width_factor'], (int, float)):
+        tg_hparams['width_factor'] = cfg['width_factor']
+    
     tg_cfg = load_cfg(cfgs, tg_exp_name, cfg['data_parallel'], cfg['output_dir'], False)
     tg_outman = OutputManager(cfg['output_dir'], tg_exp_name, tg_cfg['output_prefix_hashing'])
 
@@ -60,15 +96,23 @@ def synced_transfer(exp_name, cfg, gpu_id, prefix=''):
     wm = WeightMatching(ps, epsilon=cfg['wm_epsilon'], device=device)
     perm = None
 
-    use_random_perm = cfg['use_random_perm']
-    if use_random_perm:
+    use_random_perm = cfg.get('use_random_perm', False)
+    use_identity_perm = cfg.get('use_identity_perm', False)
+    
+    if use_identity_perm:
+        # Identity permutation: each axis maps to itself (no permutation)
+        perm = {}
+        for p, axes in ps.perm_to_axes.items():
+            perm_size = sc_param_init[axes[0][0]].shape[axes[0][1]]
+            perm[p] = torch.arange(perm_size, dtype=torch.long).to(device)
+    elif use_random_perm:
         perm_sizes = {p: sc_param_init[axes[0][0]].shape[axes[0][1]] for p, axes in ps.perm_to_axes.items()}
         perm = {p: np.arange(n) for p, n in perm_sizes.items()}
         for p in perm:
             np.random.shuffle(perm[p])
         perm = {p: torch.LongTensor(perm[p]).to(device) for p in perm}
 
-    use_true_grads = cfg['use_true_grads']
+    use_true_grads = cfg.get('use_true_grads', False)
     if use_true_grads:
         true_wm = WeightMatching(ps, epsilon=cfg['wm_epsilon'], device=device)
 
@@ -78,6 +122,12 @@ def synced_transfer(exp_name, cfg, gpu_id, prefix=''):
     assert gm_iters == 1 # to use same mini-batch in training & grad matching
     sc_checkpoints, batch_checkpoints = [], []
     sc_val_accs, tg_val_accs, tr_val_accs = [], [], []
+    cosine_similarities = []
+    
+    # Track previous parameters for delta computation
+    sc_param_prev = {k: p.detach().clone() for k, p in sc_param_init.items()}
+    tg_param_prev = {k: p.detach().clone() for k, p in tg_param_init.items()}
+    
     for ep in range(cfg['epoch']):
         # 1. Train for 1 epoch
         step_before_train = hasattr(sc_learner.scheduler, "step_before_train") and sc_learner.scheduler.step_before_train
@@ -94,7 +144,7 @@ def synced_transfer(exp_name, cfg, gpu_id, prefix=''):
         for _it, (inputs, targets) in enumerate(dataloader):
             inputs, targets = inputs.to(device), targets.to(device)
 
-            if (not use_true_grads) and (not use_random_perm) \
+            if (not use_true_grads) and (not use_random_perm) and (not use_identity_perm) \
                     and ((cfg['wm_max_iter'] is None) or (ep*int(len(dataloader) / wm_interval) + int(_it / wm_interval) < cfg['wm_max_iter'])) \
                     and ((cfg['wm_max_epoch'] is None) or (ep < cfg['wm_max_epoch'])) \
                     and (_it % wm_interval == 0):
@@ -135,6 +185,26 @@ def synced_transfer(exp_name, cfg, gpu_id, prefix=''):
                                 init_perm=perm if cfg['wm_use_prev_perm'] else None)
                 if not cfg['fast_perm_optim']:
                     del wm
+                
+                # Compute cosine similarity between source delta and target delta
+                # Get current parameters
+                sc_param_curr = {k: p.clone().detach() for k, p in sc_learner.model.named_parameters()}
+                tg_param_curr = {k: p.clone().detach() for k, p in tg_learner.model.named_parameters()}
+                
+                # Compute deltas from initial
+                sc_delta = {k: sc_param_curr[k] - sc_param_init[k] for k in sc_param_curr}
+                tg_delta = {k: tg_param_curr[k] - tg_param_init[k] for k in tg_param_curr}
+                
+                # Apply permutation to source delta
+                sc_delta_perm = apply_permutation(ps, perm, sc_delta, device=device)
+                
+                # Compute cosine similarity
+                cos_sim = compute_cosine_similarity_dict(sc_delta_perm, tg_delta)
+                cosine_similarities.append({
+                    'iteration': ep * int(len(dataloader) / wm_interval) + int(_it / wm_interval),
+                    'epoch': ep,
+                    'cosine_similarity': cos_sim
+                })
 
             sc_learner.model.train()
             tg_learner.model.train()
@@ -174,6 +244,22 @@ def synced_transfer(exp_name, cfg, gpu_id, prefix=''):
         tg_val = tg_learner.evaluate()
         outman.print(f"[{ep}] Accuracy:  {sc_val['accuracy']} (source),  {tg_val['accuracy']} (target)", prefix=prefix)
 
+        # Compute cosine similarity at end of epoch for random/identity cases (GMT already computed per iteration)
+        if (use_random_perm or use_identity_perm) and not (not use_true_grads and not use_random_perm and not use_identity_perm):
+            sc_param_curr = {k: p.clone().detach() for k, p in sc_learner.model.named_parameters()}
+            tg_param_curr = {k: p.clone().detach() for k, p in tg_learner.model.named_parameters()}
+            
+            sc_delta = {k: sc_param_curr[k] - sc_param_init[k] for k in sc_param_curr}
+            tg_delta = {k: tg_param_curr[k] - tg_param_init[k] for k in tg_param_curr}
+            
+            sc_delta_perm = apply_permutation(ps, perm, sc_delta, device=device)
+            cos_sim = compute_cosine_similarity_dict(sc_delta_perm, tg_delta)
+            cosine_similarities.append({
+                'iteration': ep,
+                'epoch': ep,
+                'cosine_similarity': cos_sim
+            })
+
         # 3. Transfer source trajectory
         sc_diff = {k: p - sc_param_init[k] for k, p in sc_learner.model.named_parameters()}
         sc_diff_perm = apply_permutation(ps, perm, sc_diff, device=device)
@@ -197,6 +283,7 @@ def synced_transfer(exp_name, cfg, gpu_id, prefix=''):
         sc_val_accs=sc_val_accs,
         tg_val_accs=tg_val_accs,
         tr_val_accs=tr_val_accs,
+        cosine_similarities=cosine_similarities,
     )
     ckp_path = outman.save_checkpoint(ckp, prefix=prefix, ext='pth', name='synced_transfer_results')
     outman.print(f'Saved synced-transfer results at: {ckp_path}', prefix=prefix)

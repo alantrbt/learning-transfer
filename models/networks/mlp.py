@@ -21,5 +21,6 @@ class MLP(nn.Module):
     def forward(self, x):
         out = x.view(x.size(0), self.num_channels * self.image_size ** 2)
         out = self.linear1(out)
+        out = F.relu(out)
         out = self.linear2(out)
         return out

@@ -188,12 +188,17 @@ __default__: &__default__
     base_matching_coeff: 0.0
     num_splits: null
     normalized_matching: false
+    broken_invariance: false
     baseline_no_perm: false
     baseline_use_target: false
     split_scheduling_fn: null
     fast_perm_optim: false
     wm_epsilon: 1.0e-7
     wm_use_prev_perm: false
+    use_random_perm: false
+    use_true_grads: false
+    wm_max_epoch: null
+    wm_max_iter: null
 
     num_perms: 1
     branch_at_best: true
@@ -358,7 +363,7 @@ mnist_mlp_sgd: &mnist_mlp_sgd
     dataset.config_name: 'mnist'
     model.config_name: 'mlp'
 
-    epoch: 10
+    epoch: 15
     batch_size: 128
     optimizer: "SGD"
     lr_scheduler: null
@@ -367,8 +372,8 @@ mnist_mlp_sgd: &mnist_mlp_sgd
 
     hparams_grid:
         lr: [0.01]
-        width_factor: [64.0]  # dim=4096
-        seed: [101]
+        width_factor: [0.125, 0.25, 0.5, 1.0, 2.0]  # dim=8, 16, 32, 64, 128
+        seed: [101, 102]
 
 ########################################################
 #   Command: transfer
@@ -391,8 +396,8 @@ transfer_init-mnist_mlp: &transfer_init-mnist_mlp
         epoch_ft: [3]
         lr_ft: [0.01]
         gm_iters: [1]
-        checkpoint_epochs: [[-1, 9]]
-        num_splits: [10]
+        checkpoint_epochs: [[-1, 14]]
+        num_splits: [5]
         split_scheduling_fn: ['1+math.cos((t/T)*math.pi)']
         fast_perm_optim: [false]
         source_target_seeds: [[101, 102]]
@@ -777,21 +782,21 @@ section_4_3_cifar10_conv8:
 
 synced_transfer_init-mnist_mlp: &synced_transfer_init-mnist_mlp
     <<: *mnist_mlp_sgd
-    allowed_commands: [synced_transfer]
+    allowed_commands: [synced_transfer, plot]
     checkpoint_epochs: [-1]
     source_exp_name: mnist_mlp_sgd
     source_hparams:
         lr: 0.01
-        width_factor: 64.0
+        width_factor: 0.125  # default, overridden by hparams_grid
         seed: 101
     target_exp_name: mnist_mlp_sgd
     target_hparams:
         lr: 0.01
-        width_factor: 64.0
+        width_factor: 0.125  # default, overridden by hparams_grid
         seed: 102
     output_prefix_hashing: true
     hparams_grid:
-        epoch: [10]
+        epoch: [15] # -> 500 ?
         gm_iters: [1]
         normalized_matching: [false]
         num_perms: [1]
@@ -800,10 +805,11 @@ synced_transfer_init-mnist_mlp: &synced_transfer_init-mnist_mlp
         wm_max_iter: [500]
         wm_use_prev_perm: [true]
         fast_perm_optim: [false]
+        width_factor: [0.125, 0.25, 0.5, 1.0, 2.0]
         seed: [1]
-synced_transfer_init-mnist_mlp_random:
+synced_transfer_init-mnist_mlp_identity:
     <<: *synced_transfer_init-mnist_mlp
-    use_random_perm: true
+    use_identity_perm: true
 
 synced_transfer_init-cifar10_conv8: &synced_transfer_init-cifar10_conv8
     <<: *cifar10_conv8_sgd
