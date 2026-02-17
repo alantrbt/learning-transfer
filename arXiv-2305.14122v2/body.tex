@@ -1,0 +1,542 @@
+
+\section{Introduction}
+Enormous computational cost is a major issue in deep learning, especially in training large-scale neural networks (NNs).
+Their highly non-convex objective and high-dimensional parameters make their training difficult and inefficient.
+Toward a better understanding of training processes of NNs, their loss landscapes~\citep{hochreiter1997flat,choromanska2015loss} have been actively studied from viewpoints of optimization~\citep{haeffele2017global,li2017convergence,yun2018global} and geometry~\citep{freeman2017topology,simsek2021geometry}.
+One of the geometric approaches to loss landscapes is mode connectivity~\citep{garipov2018loss,draxler2018essentially}, which shows the existence of low-loss curves between any two optimal solutions trained with different random initializations or data ordering.
+This indicates a surprising connection between seemingly different independent trainings.
+
+Linear mode connectivity (LMC), a special case of mode connectivity, focuses on whether or not two optimal solutions are connected by a low-loss linear path, which is originally studied in relation to neural network pruning~\citep{frankle2020linear}.
+It is known that the solutions trained from the same initialization (and data ordering in the early phase) tend to be linearly mode connected~\citep{nagarajan2019uniform,frankle2020linear}, but otherwise they cannot be linearly connected in general.
+However, \citet{entezari2021role} observed that even two solutions trained from different random initializations can be linearly connected by an appropriate permutation symmetry.
+\citet{ainsworth2023git} developed an efficient method to find such permutations and confirmed the same phenomena with modern NN architectures.
+These observations strength the expectation on some sort of similarity between two independent training runs even from different  initializations, via permutation symmetry.
+
+In this paper, motivated by these observations, we make the first attempt to leverage such similarity between independent training processes for efficient training.
+In particular, we introduce a novel problem called {\it learning transfer problem}, which aims to reduce training costs for seemingly duplicated training runs on the same dataset, such as model ensemble or knowledge distillation, by transferring a learning trajectory for one initial parameter to another one without actual training.
+The problem statement is informally stated as follows:
+
+\vspace{-1.5mm}
+\paragraph{Learning transfer problem {\normalfont (informal)}.} {\it Suppose that a source learning trajectory $(\theta_\source^0, \cdots, \theta_\source^T)$ is given for some initial parameter $\theta_\source^0$. Given another initial parameter $\theta_\transf^0$, called target initialization, how can we synthesize the learning trajectory $(\theta_\transf^0,\cdots,\theta_\transf^T)$ for $\theta_\transf^0$ efficiently? }
+\vspace{1mm}
+
+To tackle this problem, as illustrated in Figure~\ref{figure:transfer learning trajectory}, we take an approach to transform the source trajectory $(\theta_\source^0, \cdots, \theta_\source^T)$ by an appropriate permutation symmetry $\pi$ as in the previous works of LMC.
+In Section~\ref{section:learning transfer}, we formulate the learning transfer problem as a non-linear optimization problem for $\pi$.
+We also investigate how much the source trajectory for $\theta_\source^0$ can be transformed close to the target trajectory for $\theta_\transf^0$ by the optimal $\pi$, both theoretically and empirically.
+We then derive a theoretically-grounded algorithm to approximately solve it, and also develop practical techniques to reduce its storage and computational cost.
+Since our final algorithm requires only several tens of gradient computations and lightweight linear optimization in total, we can transfer a given source trajectory very efficiently compared to training from scratch. 
+In Section~\ref{section:experiments}, first we empirically demonstrate that learning trajectories can be successfully transferred between two random or pre-trained initializations, which leads to non-trivial accuracy without direct training (Section~\ref{section:experiments:learning transfer}).
+Next we further confirmed that the transferred parameters can indeed accelerate the convergence in their subsequent training (Section~\ref{section:experiments:acceleration}).
+Finally, we investigate what properties the transferred parameters inherit from the target initializations (Section~\ref{section:what is being inherited}).
+Surprisingly, we observed that, even when the source trajectory is trained from poorly generalizing pre-trained initialization $\theta_\source^0$ and thus inherits poor generalization, the  one transferred to more generalizing initialization $\theta_\transf^0$ inherits better generalization from $\theta_\transf^0$.
+
+%
+
+In summary, our contributions are as follows: (1) we formulated the brand new problem of learning transfer with theoretical evidence, (2) derived the first algorithm to solve it, (3) empirically showed that transferred parameters can achieve non-trivial accuracy without direct training and accelerate their subsequent training, and (4) investigated the benefit/inheritance from target initializations. Finally, more related works are discussed in Appendix~\ref{appendix:related works}.
+
+
+
+\begin{figure}
+\centering
+    \begin{minipage}{0.38\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{resources/figure1.pdf}
+        \vspace{-5mm}
+        \captionof{figure}{Permutation symmetry of neural networks. (Section~\ref{section:permutation symmetry of NNs})}
+        \label{figure:permutation symmetry}
+    \end{minipage}
+    \hspace{0.03\textwidth}
+    \begin{minipage}{0.57\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{resources/figure2.pdf}
+        \vspace{-5mm}
+        \captionof{figure}{Transfer a learning trajectory from one to another NN by a permutation symmetry $\pi$. (Section~\ref{section:learning transfer})}
+        \label{figure:transfer learning trajectory}
+    \end{minipage}
+    \vspace{-3mm}
+\end{figure}
+
+\vspace{-1mm}
+\section{Background}\label{section:background}
+
+\vspace{-1mm}
+\subsection{Neural networks}
+
+Let $L, N \in \mathbb{N}$. Let $f(x;\theta)$ be an $L$-layered neural network (NN) parameterized by $\theta\in\mathbb{R}^N$ with a non-linear activation function $\sigma:\mathbb{R}\to\mathbb{R}$ and intermediate dimensions $(d_0,\cdots,d_L) \in \mathbb{N}^{L+1}$.
+Given an input $x\in\mathbb{R}^{d_0}$, the output $f(x;\theta) := x_L \in \mathbb{R}^{d_L}$ is computed inductively as follows:
+\begin{equation*}
+x_{i} := \begin{cases}
+x, & (i=0) \\
+\sigma(W_i x_{i-1} + b_i), & (1 \leq i \leq L-1) \\
+W_{L} x_{L-1} + b_{L-1}, & (i=L)
+\end{cases}
+\end{equation*}
+where $W_i \in \mathbb{R}^{d_i \times d_{i-1}}, b_i\in\mathbb{R}^{d_i}$ are weight matrices and bias vectors.
+Under these notation, the parameter vector $\theta$ is described as $\theta = (W_1, b_1, \cdots, W_{L}, b_L) \in \mathbb{R}^{N}$.
+
+
+Stochastic gradient descent (SGD) is a widely used approach for training neural networks.
+Let $\mathcal{X}$ be the input space $\mathbb{R}^{d_0}$ and $\mathcal{Y}$ be the output space $\mathbb{R}^{d_L}$.
+Let $\mathcal{D}$ be a probabilistic distribution over the input-output space $\mathcal{X}\times\mathcal{Y}$, and $\mathcal{L}:\mathcal{Y}\times\mathcal{Y}\to\mathbb{R}$ be a differentiable loss function.
+SGD trains a neural network $f(x;\theta)$ by iterating the following steps: (1) Sampling a mini-batch $B = ((x_1,y_1),\cdots,(x_b,y_b)) \sim \mathcal{D}^b$ of size $b \in \mathbb{N}$, (2) computing an estimated gradient $g_B := \frac{1}{b} \sum_{i=1}^b \nabla_\theta \mathcal{L}(f(x_i;\theta), y_i)$ for the mini-batch and (3) updating the model parameter $\theta$ by $\theta - \alpha g_B + \text{(momentum)}$ where $\alpha\in\mathbb{R}_{>0}$ is a fixed or scheduled step size.
+
+\subsection{Permutation symmetry of NNs}\label{section:permutation symmetry of NNs}
+
+For simplicity, we assume that all bias vectors $b_i$ are zero by viewing them as a part of the weight matrices.
+Let $\Theta$  be the parameter space $\{\theta = (W_1, \cdots, W_L) \in \mathbb{R}^N\}$ for the $L$-layered neural network $f(x;\theta)$.
+Now we introduce a permutation group action on the parameter space $\Theta$.
+For $n \in \mathbb{N}$, let $S_n$ denotes the symmetric group over $\{1,\cdots,n\}\subset\mathbb{N}$, which is the set of all bijective mapping $\sigma: \{1,\cdots,n\} \to \{1,\cdots,n\}$.
+We define our permutation group $G$ by $G := S_{d_1}\times\cdots\times S_{d_{L-1}}$.
+The group action $G \times \Theta \to \Theta$ is defined as follows:
+For $\pi=(\sigma_1,\cdots,\sigma_{L-1})\in G$ and $\theta\in\Theta$, the action $\pi\theta$ is defined by
+\begin{equation}
+    \pi \theta := ( \sigma_1 W_1, \cdots, \sigma_{i} W_i \sigma_{i-1}^{-1}, \cdots, W_L \sigma_{L-1}^{-1}) \in \Theta,
+\end{equation}
+where each $\sigma_i$ is viewed as the corresponding permutation matrix of size $d_i\times d_i$.
+We call this group action the permutation symmetry of $L$-layered neural networks.
+
+Simply speaking, the action $\pi\theta$ just interchanges the axes of the intermediate vector $x_i$ of the neural network $f(x;\theta)$ with the corresponding base change of the weight matrices and bias vectors (Figure~\ref{figure:permutation symmetry}).
+Thus we can see that this action does not change the output of the neural network, i.e., $f(x;\pi\theta)=f(x;\theta)$ for every $x\in\mathcal{X},\theta\in\Theta,\pi\in G$.
+In other words, the two parameters $\theta$ and $\pi\theta$ can be identified from the functional perspective of neural networks.
+
+\subsection{Parameter alignment by permutation symmetry}\label{section:preliminaries:parameter alignment by permutation}
+
+Previous work by \citet{ainsworth2023git} attempts to merge given two NN models into one model by leveraging their permutation symmetry.
+They reduced the merge problem into the parameter alignment problem:
+\begin{equation}\label{parameter alignment problem}
+    \min_{\pi\in G} \lVert \pi\theta_1 - \theta_2 \rVert_2^2 =  \min_{\pi=(\sigma_1,\cdots,\sigma_{L-1})} \sum_{1\leq i \leq L} \lVert \sigma_i W_i\sigma_{i-1}^{-1} - Z_i \rVert_F^2,
+\end{equation}
+where $\theta_1 = (W_1,\cdots,W_L)$ and $\theta_2=(Z_1,\cdots,Z_L)$ are the parameters to be merged.
+To solve this, they also proposed a coordinate descent algorithm by iteratively solving the following linear optimizations regarding to each $\sigma_i$'s:
+\begin{equation}\label{linear sum assignment problem}
+    \max_{\sigma_i\in S_i} \langle \sigma_i, Z_i \sigma_{i-1} W_i^\top + Z_{i+1}^\top \sigma_{i+1} W_{i+1} \rangle
+\end{equation}
+The form of this problem has been well-studied as a linear assignment problem, and we can solve it in a very efficient way~\citep{kuhn1955hungarian}.
+Although the coordinate descent algorithm was originally proposed for model merging, we can also use it for other problems involving the parameter alignment problem (eq.~\ref{parameter alignment problem}).
+
+\section{Learning Transfer}\label{section:learning transfer}
+
+In this section, first we formulate the problem of transferring learning trajectories (which we call  {\it learning transfer problem}) as a non-linear optimization problem.
+Next, we derive an algorithm to solve it by reducing the non-linear optimization problem to a sequence of linear optimization problems.
+Finally, we introduce additional techniques for reducing  the storage and computation cost of the derived algorithm.
+
+\subsection{Problem formulation}\label{section:problem formulation}
+
+Let $f(x;\theta)$ be some NN model with an $N$-dimensional parameter $\theta\in\mathbb{R}^N$.
+%
+A sequence of $N$-dimensional parameters $(\theta^0, \cdots, \theta^T)\in\mathbb{R}^{N\times (T+1)}$ is called a {\it learning trajectory} of length $T$ for the neural network $f(x;\theta)$ if the training loss for $\theta^t$ decreases as $t$ increases, from the initial parameter $\theta^0$ to the convergent one $\theta^T$.
+Note that \textit{we do not specify what $t$ represents a priori; it could be iteration, epoch or any notion of training timesteps}.\footnote{In our experiments, due to practical constraints, we mainly consider cases where $t$ represents training epoch or linear interpolating step as explained in Section~\ref{section:additional techniques}, which leads to the length $T$ being smaller than a hundred.}
+Now we can state our main problem:
+\vspace{-1mm}
+\paragraph{Learning transfer problem {\normalfont (informal)}.} Suppose that a learning trajectory $(\theta_\source^0, \cdots, \theta_\source^T)$ is given for an initial parameter $\theta_\source^0$, which we call a {\it source trajectory}. Given another initial parameter $\theta_\transf^0$ "similar" to $\theta_\source^0$ in some sense, how can we synthesize the learning trajectory $(\theta_\transf^0,\cdots,\theta_\transf^T)$, which we call a {\it transferred trajectory}, for the given initialization $\theta_\transf^0$? (Figure~\ref{figure:transfer learning trajectory})
+\vspace{1mm}
+
+To convert this informal problem into a computable one, we need to define the notion of "similarity" between two initial parameters.
+As a first step, in this paper, we consider two initializations are "similar" if two learning trajectories starting from them are indistinguishable up to permutation symmetry of neural networks (Section~\ref{section:permutation symmetry of NNs}).
+%
+In other words, for the two learning trajectories $(\theta_\source^0,\cdots,\theta_\source^T)$ and $(\theta_\transf^0,\cdots,\theta_\transf^T)$, we consider the following assumption:
+\vspace{-1mm}
+\paragraph{Assumption (P).} There exists a permutation $\pi$ satisfying $\pi (\theta_\source^{t} - \theta_\source^{t-1}) \approx \theta_\transf^{t} - \theta_\transf^{t-1}$ for  $t=1,\cdots, T$, where the transformation $\pi (\theta_\source^{t}-\theta_\source^{t-1})$ is as defined in Section~\ref{section:permutation symmetry of NNs}.
+\vspace{1mm}
+
+Under this assumption, if we know the permutation $\pi$ providing the equivalence between the source and transferred trajectories, we can recover the latter one $(\theta_\transf^0,\cdots,\theta_\transf^T)$ from the former one $(\theta_\source^0, \cdots,\theta_\source^T)$ and the permutation $\pi$, by setting $\theta_\transf^{t} := \theta_\transf^{t-1} + \pi(\theta_\source^{t}-\theta_\source^{t-1})$ inductively on $t$ (Figure~\ref{figure:transfer learning trajectory}). Therefore, the learning-trajectory problem can be reduced to estimating the permutation $\pi$ from the source trajectory $(\theta_\source^0,\cdots,\theta_\source^T)$ and the given initialization $\theta_\transf^0$.
+
+Naively, to estimate the  permutation $\pi$, we want to consider the following optimization problem:
+\begin{equation}\label{naive optimization problem}
+    \min_{\pi} \sum_{t=1}^T \left\lVert \pi(\theta_1^t - \theta_1^{t-1}) - (\theta_2^t - \theta_2^{t-1}) \right\rVert_2^2
+\end{equation}
+However, this problem is ill-defined in our setting since each $\theta_\transf^t$ is not available for $1\leq t \leq T$ in advance. Even if we defined $\theta_\transf^t := \theta_\transf^{t-1} + \pi (\theta_\source^t - \theta_\source^{t-1})$ in the equation~(\ref{naive optimization problem}) as discussed above, the optimization problem became trivial since any permutation $\pi$ makes the $L^2$ norm to be zero. 
+
+Thus we need to fix the optimization problem (eq.~\ref{naive optimization problem}) not to involve unavailable terms. We notice that the difference $\theta_\transf^{t} - \theta_\transf^{t-1}$ can be roughly approximated by a negative gradient at $\theta_\transf^{t-1}$ averaged over a mini-batch if the trajectory is enough fine-grained.
+Therefore, we can consider the approximated version of equation~(\ref{naive optimization problem}) as follows:
+\begin{equation}\label{gradient matching problem}
+    \mathcal{P}_T: \ \  \min_{\pi} \sum_{t=0}^{T-1} \left\lVert \pi \nabla_{\theta_\source^t} \mathcal{L} - \nabla_{\theta_{\transf,\pi}^t} \mathcal{L} \right\rVert_2^2, \text{  where } \theta_{\transf,\pi}^t := \theta_{\transf,\pi}^{t-1} + \pi (\theta_\source^t - \theta_\source^{t-1}).
+\end{equation}
+In contrast to the equation~(\ref{naive optimization problem}), this optimization problem is well-defined even in our setting because each $\theta_{\transf,\pi}^{t}$ is defined by using the previous parameter $\theta_{\transf,\pi}^{t-1}$ inductively.
+
+
+\subsection{When and how does Assumption (P) holds?}\label{section:validating assumption of learning transfer problem}
+
+Before delving into the optimization problem $\mathcal{P}_T$, here we briefly investigate when and how our Assumption (P) holds. To measure the similarity of two vectors $\pi(\theta_\source^t - \theta_\source^{t-1})$ and $\theta_\transf^t - \theta_\transf^{t-1}$, we mainly use  a variant of normalized distance $\lVert v_1 - v_2 \rVert / \sqrt{\lVert v_1 \rVert \lVert v_2 \rVert}$ for two vectors $v_1, v_2 \in \mathbb{R}^n$, which can also be considered as cosine distance when $\lVert v_1\rVert \approx \lVert v_2 \rVert$.
+
+First of all, we study the case of $2$-layered ReLU neural networks $f_{w,v}(x) := \sum_{i=1}^N v_i \sigma(\sum_{j=1}^d w_{ij} x_j)$ with $N$ hidden neurons, where $\sigma(z) := \max(z, 0)$ is ReLU activation.
+Let $\theta_\source^0=((w_{ij})_{ij}, (v_i)_i)$ and $\theta_\transf^0=((w'_{ij})_{ij}, (v'_i)_i)$ be initialized by Kaiming uniform initialization~\citep{he2015delving}, i.e., $w_{ij},w'_{ij}\sim U([-\frac{1}{\sqrt{d}},\frac{1}{\sqrt{d}}])$ and $v_{i},v'_{i}\sim U([-\frac{1}{\sqrt{N}},\frac{1}{\sqrt{N}}])$. Then it is theoretically shown that Assumption (P) holds at initialization with high probability when the hidden dimension $N$ is sufficiently large:
+\begin{theorem}[See Theorem~\ref{appendix:theorem:validating assumption at initialization} for details]
+Given two pairs of randomly initialized parameters $(w, v)$ and $(w', v')$, with high probability, there exists a permutation symmetry $\pi \in S_N$ such that the normalized distance between the expected gradients $\mathbb{E}_{(x,y)} [\nabla_{w,v} \mathcal{L}]$ and $\mathbb{E}_{(x,y)} [\nabla_{w'',v''} \mathcal{L}]$, where $(w'', v'')$ is the permuted one of $(w', v')$ by $\pi$, can be arbitrarily small when $N$ is sufficiently large.
+\end{theorem}
+Although this result only validates Assumption (P) at initialization, we can naturally expect that same similarity holds for more iterations ($t>0$) due to (almost everywhere) smoothness of neural networks with respect to parameters.
+Figure~(\ref{figure:assumption:2-mlp on mnist}) empirically validates this expectation.
+
+Also, we empirically investigate the case of modern network architectures in Figure~(\ref{figure:assumption:conv8 on cifar}), (\ref{figure:assumption:resnet18 on imagenet}).
+The results show that the similarity between learning trajectories heavily depends on network architecture and type of initialization (i.e., random or pre-trained) rather than datasets.
+Unfortunately, we can see that, in such modern network architectures, Assumption (P) holds weakly or may be broken after hundreds of iterations.
+However, in this paper, Assumption (P) still plays an important role for deriving our algorithm to solve the main problem $\mathcal{P}_T$, which empirically works well even with these architectures as we will see in Section~\ref{section:experiments}.
+It remains for future work to make the assumption more appropriate for these modern architectures.
+
+\begin{figure}
+    \centering
+    \begin{subfigure}[t]{0.32\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{resources/compare_sync_diff_mnist_mlp_500iters.pdf}
+        \caption{2-MLP on MNIST.}\label{figure:assumption:2-mlp on mnist}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[t]{0.32\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{resources/compare_sync_diff_cifar10_conv8_500iters.pdf}
+        \caption{Conv8 on CIFAR-10/100.}\label{figure:assumption:conv8 on cifar}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[t]{0.32\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{resources/compare_sync_diff_imagenet_resnet18_500iters.pdf}
+        \caption{ResNet18 on ImageNet/CUB.}\label{figure:assumption:resnet18 on imagenet}
+    \end{subfigure}
+    \caption{ We evaluate cosine similarities between $\pi(\theta_\source^t - \theta_\source^{t-1})$ and $\theta_\transf^t - \theta_\transf^{t-1}$, where $\theta_\source^t$ or $\theta_\transf^t$ represents a parameter trained for $10t$ iterations, averaged over timesteps $t$. Solid lines are plotted for the solution $\pi$ of equation~(\ref{naive optimization problem}), and dotted lines are for $\pi$ being the identity transformation (i.e., the case not permuted) as a baseline. Fig.(\ref{sub@figure:assumption:2-mlp on mnist}): Experiments using 2-layered MLP with various hidden dimensions. Over-parameterization leads to higher cosine similarities of learning trajectories.  Fig.(\ref{sub@figure:assumption:conv8 on cifar}, \ref{sub@figure:assumption:resnet18 on imagenet}): The label $X\to Y$ means that the initialization is random or  pre-trained on $X$, and then trained on $Y$. The cosine similarities depend on model architectures and initialization-type rather than datasets. }\label{figure:empirical validation of assumption (P)}
+    \vspace{-3mm}
+\end{figure}
+
+
+
+
+\subsection{Algorithm: gradient matching along trajectory}\label{section:algorithm}
+
+Now our goal is to solve the optimization problem $\mathcal{P}_T$ (eq.~\ref{gradient matching problem}).
+However, the problem $\mathcal{P}_T$ seems hard to solve directly because the variable $\pi$ appears non-linearly in the second term $\nabla_{\theta^t_{\transf, \pi}}\mathcal{L}$.
+To avoid the non-linearity, we introduce a sequence of linear sub-problems $\{\mathcal{P}'_{s}\}_{1\leq s \leq T}$ whose solution converges to the solution for $\mathcal{P}_T$. For each $s\in \{1,\cdots, T\}$, we consider the following problem:
+\begin{equation}\label{eq:linear sub-problems}
+    \mathcal{P}'_s: \ \  \min_{\pi_s} \sum_{t=0}^{s-1} \left\lVert 
+    \pi_{s} \nabla_{\theta_\source^t}\mathcal{L} - \nabla_{\theta_{\transf, \pi_{s-1}}^t}\mathcal{L}
+    \right\rVert_2^2
+\end{equation}
+Since the second term in $\mathcal{P}'_s$ uses the solution $\pi_{s-1}$ for the previous sub-problem $\mathcal{P}'_{s-1}$, the unknown variable $\pi_s$ appears only in the first term $\pi_s\nabla_{\theta^1_\source} \mathcal{L}$ in a linear way.
+Moreover, the following lemma implies that the final solution $\pi_T$ from the sequence $\{\mathcal{P}'_s\}_{1\leq s \leq T}$ approximates the solution for the original problem $\mathcal{P}_T$:
+\begin{lemma}\label{lemma:consistency of subproblems}
+Under some regularity assumption, we have $\theta^t_{2,\pi_{s}} \approx \theta^t_{2,\pi_{s'}}$ for $0\leq t \leq s < s'$.
+\end{lemma}
+The proof will be given in Appendix.
+Indeed, by this approximation, we find out that the solution $\pi_T$ for the last sub-problem $\mathcal{P}'_T$ minimizes
+\begin{eqnarray}
+    \sum_{t=0}^{T-1} \left\lVert 
+    \pi_{T} \nabla_{\theta_\source^t}\mathcal{L} - \nabla_{\theta_{\transf, \pi_{T-1}}^t}\mathcal{L}
+    \right\rVert_2^2 
+    \approx 
+    \sum_{t=0}^{T-1} \left\lVert 
+    \pi_{T} \nabla_{\theta_\source^t}\mathcal{L} - \nabla_{\theta_{\transf, \pi_{T}}^t}\mathcal{L}
+    \right\rVert_2^2,
+\end{eqnarray}
+where the right-hand side is nothing but the objective of the original problem $\mathcal{P}_T$.
+
+Algorithm~\ref{algorithm:gradient matching along trajectory} gives a step-by-step procedure to obtain the transferred learning trajectory $(\theta_\transf^1, \cdots, \theta_\transf^T)$ by solving the sub-problems $\{\mathcal{P}'_s\}_{0\leq s \leq T}$ sequentially.
+In lines 2-6, it computes an average of gradients $\nabla_{\theta}\mathcal{L}$ over a single mini-batch for each $\theta = \theta^{t-1}_\source, \theta^{t-1}_\transf, (1\leq t \leq s)$, which is required in the $s$-th sub-problem $\mathcal{P}'_s$ (eq.~\ref{eq:linear sub-problems}).
+In line 7, the $s$-th permutation $\pi_s$ is obtained as a solution of the sub-problem $\mathcal{P}'_s$, which can be solved as a linear optimization (eq.~\ref{linear sum assignment problem}) using the coordinate descent algorithm proposed in \citet{ainsworth2023git}.
+Then we update the transferred parameter $\theta_\transf^t$ for $t=1,\cdots,s$ in line 8.
+
+\begin{figure}[htbp]
+    \centering
+    \begin{minipage}[t]{0.48\linewidth}
+        \begin{algorithm}[H]
+            \small
+            \caption{Gradient Matching along Trajectory ({\bf GMT})}\label{algorithm:gradient matching along trajectory}
+            \begin{algorithmic}[1]
+                \Require $(\theta_\source^{0},\cdots,\theta_\source^{T}) \in \mathbb{R}^{n\times (T+1)}$, $\theta_\transf^{0}\in\mathbb{R}^n$
+                \For{$s=1,\cdots,T$}
+                    \For{$t=1,\cdots,s$}
+                        \State Sample $(x_1,y_1),\cdots,(x_b,y_b)\sim\mathcal{D}$.
+                        \State $g_1^{t} \gets \frac{1}{b} \sum_{i=1}^{b} \nabla_{\theta_1^{t-1}} \mathcal{L}(f(x_i;\theta_1^{t-1}),y_i)$
+                        \State $g_2^{t} \gets \frac{1}{b} \sum_{i=1}^{b} \nabla_{\theta_2^{t-1}} \mathcal{L}(f(x_i;\theta_2^{t-1}),y_i)$ 
+                    \EndFor
+                    \State $\pi_s \gets  \argmin_{\pi} \sum_{t=1}^s \lVert g_2^{t} - \pi g_1^{t} \rVert_2^2$
+                    \For{$t=1,\cdots,s$}
+                        \State $\theta_2^{t} \gets \theta_2^{t-1} + \pi_s(\theta_1^{t} - \theta_1^{t-1})$
+                    \EndFor
+                \EndFor
+                \State return $(\theta_2^{1},\cdots,\theta_2^{s})$
+                \end{algorithmic}
+        \end{algorithm}
+    \end{minipage}
+    \hfill
+    \begin{minipage}[t]{0.48\linewidth}
+        \begin{algorithm}[H]
+            \small
+            \begin{algorithmic}[1]
+                \Require $(\theta_\source^{0},\cdots,\theta_\source^{T}) \in \mathbb{R}^{n\times (T+1)}$, $\theta_\transf^{0}\in\mathbb{R}^n$
+                \For{$s=1,\cdots,T$}
+                    \State Sample $(x_1,y_1),\cdots,(x_b,y_b)\sim\mathcal{D}$.
+                    \State $g_1^{t} \gets \frac{1}{b} \sum_{i=1}^{b} \nabla_{\theta_1^{s-1}} \mathcal{L}(f(x_i;\theta_1^{s-1}),y_i)$
+                    \State $g_2^{t} \gets \frac{1}{b} \sum_{i=1}^{b} \nabla_{\theta_2^{s-1}} \mathcal{L}(f(x_i;\theta_2^{s-1}),y_i)$ 
+                    \State $\pi_s \gets  \argmin_{\pi} \sum_{t=1}^s \lVert g_2^{t} - \pi g_1^{t} \rVert_2^2$
+                    \For{$t=1,\cdots,s$}
+                        \State $\theta_2^{t} \gets \theta_2^{t-1} + \pi_s(\theta_1^{t} - \theta_1^{t-1})$
+                    \EndFor
+                \EndFor
+                \State return $(\theta_2^{1},\cdots,\theta_2^{s})$
+                \end{algorithmic}
+            \caption{Fast Gradient Matching along Trajectory ({\bf FGMT})}\label{algorithm:fast gradient matching along trajectory}
+        \end{algorithm}
+    \end{minipage}
+    \vspace{-2.5mm}
+\end{figure}
+
+\subsection{Additional techniques}\label{section:additional techniques}
+
+While Algorithm~\ref{algorithm:gradient matching along trajectory} solves the learning transfer problem~(eq.~\ref{gradient matching problem}) approximately, it still has some issues in terms of storage and computation cost. Here we explain two practical techniques to resolve them.
+
+\paragraph{Linear trajectory.}
+
+In terms of the storage cost, Algorithm~\ref{algorithm:gradient matching along trajectory} requires a capacity of $T+1$ times the model size to keep a learning trajectory of length $T$, which will be a more substantial issue as model size increases or the trajectory becomes fine-grained.
+To reduce the required storage capacity, instead of keeping the entire trajectory, we propose to imitate it by linearly interpolating the end points.
+In other words, given an initial parameter $\theta_1^0$ and the final $\theta_1^T$, we define a new trajectory $[\theta_1^0:\theta_1^T] := (\theta_1^{0}, \cdots, \theta_1^t,\cdots, \theta_1^{T})$ with $\theta_1^t := (1-\lambda_t)\theta_1^{0} + \lambda_t\theta_1^T$ and $0 = \lambda_0 \leq \cdots \leq \lambda_t \leq \cdots \leq \lambda_T = 1$.
+\begin{wrapfigure}{tr}{0.325\textwidth}
+  \vspace{-2mm}
+      \includegraphics[width=\linewidth]{resources/section_3-3_real_vs_linear.pdf}
+      \vspace{-5mm}
+  \caption{\small Linear vs. actual trajectory (Conv8 on CIFAR-10).}
+  \label{figure:linear vs actual trajectory}
+  \vspace{-3mm}
+\end{wrapfigure}
+Previous studies on the monotonic linear interpolation~\citep{goodfellow2015qualitatively,frankle2020revisiting} indicate that such a linearly interpolated trajectory satisfy our definition of learning trajectories in SGD training of modern deep neural networks.
+Throughout this paper, we employ uniform scheduling for $\lambda_t$ defined by $\lambda_{t+1} - \lambda_t := 1/T$.
+Next, we compare the transferred results between the linear trajectory $[\theta_1^0:\theta_1^T]$ and the actual trajectory $(\theta_\source^0,\cdots,\theta_\source^T)$ where each $\theta_\source^t$ is a checkpoint at the $t$-th training epoch on CIFAR-10 with $T=60$.
+Interestingly, the transfer of the linear trajectory is more stable and has less variance than the transfer of the actual one.
+This may be because the actual trajectory contains noisy information while the linear trajectory is  directed towards the optimal solution $\theta_\source^T$.
+Due to its storage efficiency and stability in accuracy, we employ the linear trajectory of the length $T \leq 40$ throughout our experiments in Section~\ref{section:experiments}.
+
+
+\vspace{-2mm}
+\paragraph{Gradient caching.}
+
+In terms of the computation cost, Algorithm~\ref{algorithm:gradient matching along trajectory} requires $O(T^2)$ times gradient computation.
+To reduce the number of gradient computation, we propose to cache the gradients once computed instead of re-computing them for every $s=1,\cdots,T$.
+In fact, the cached gradients $\nabla_{\theta_{2,\pi_s}^{t-1}} \mathcal{L}$ and the re-computed gradients $\nabla_{\theta_{2,\pi_{s'}}^{t-1}} \mathcal{L}$ are not the same quantity exactly since the intermediate parameter $\theta_{2,\pi_s}^{t-1}=\theta_2^{0}+\pi_s (\theta_1^{t-1} - \theta_1^{0})$ takes different values for each $s$. However, they can be treated as approximately equal by Lemma~\ref{lemma:consistency of subproblems} if we assume the continuity of the gradients.
+Now we can reduce the number of gradient computation from $O(T^2)$ to $O(T)$ by caching the gradients once computed.
+We describe this computationally efficient version in Algorithm~\ref{algorithm:fast gradient matching along trajectory}.
+
+
+
+\begin{figure}
+    \centering
+    \begin{subfigure}[t]{0.325\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{resources/section_4-1_init-mnist_mlp.pdf}
+        \caption{MNIST (2-MLP)}\label{figure: mnist with mlp}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[t]{0.325\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{resources/section_4-1_init-cifar10_conv8.pdf}
+        \caption{CIFAR-10 (Conv8)}\label{figure: cifar10 with conv8}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[t]{0.325\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{resources/section_4-1_init-imagenet_resnet18.pdf}
+        \caption{ImageNet (ResNet-18)}\label{figure: imagenet with resnet18}
+    \end{subfigure}
+    \vskip\baselineskip
+    \begin{subfigure}[t]{0.325\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{resources/section_4-1_imagenet-cars_resnet18.pdf}
+        \caption{ImageNet $\to$ Cars}\label{figure: imagenet to cars}
+    \end{subfigure}
+    \begin{subfigure}[t]{0.325\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{resources/section_4-1_imagenet-cub_resnet18.pdf}
+        \caption{ImageNet $\to$ CUB}\label{figure: imagenet to cub}
+    \end{subfigure}
+    \begin{subfigure}[t]{0.325\textwidth}
+      \centering
+      \includegraphics[width=\textwidth]{resources/section_4-1_cifar10-cifar100all_conv8.pdf}
+      \caption{CIFAR-10 $\to$ CIFAR-100}\label{figure: cifar10 to cifar100}
+    \end{subfigure}
+  \caption{We plot the validation accuracies of the transferred parameter $\theta_{\transf,\pi_t}^t$ for each $t=1,\cdots,T$ with various datasets and NN architectures. We also provide the standard deviation over three runs for each experiment. The dotted bars show accuracies in standard training. (Upper) Transfer of a learning trajectory on a single dataset between random initial parameters. (Lower) Transfer of a fine-tuning trajectory between pre-trained parameters. For example, "ImageNet $\to$ Cars" means the transfer of the fine-tuning trajectory on the Cars dataset between the parameters pre-trained on ImageNet. }
+    \label{figure:transfer between random and pretrained inits}
+    \vspace{-1mm}
+\end{figure}
+
+\section{Experiments}\label{section:experiments}
+
+In this section, we empirically evaluate how learning transfer works on standard vision datasets.
+First, we compare our proposed methods ({\bf GMT}, {\bf FGMT}) and two baselines ({\bf Naive}, {\bf Oracle}), which are explained below, under the following two scenarios: (1) transferring learning trajectories starting from randomly initialized parameters and (2) transferring learning trajectories starting from pre-trained parameters (Section~\ref{section:experiments:learning transfer}).
+Next, we evaluate how efficiently the transferred parameters can be trained in their subsequent training. (Section~\ref{section:experiments:acceleration}).
+Finally, we investigate what properties the transferred parameters inherit from the target initializations from viewpoints of loss landscape and generalization (Section~\ref{section:what is being inherited}).
+The details on experimental settings are provided in Appendix~\ref{appendix:details on experiments}.
+
+\vspace{-3mm}
+\paragraph{Baselines.}
+
+As baselines for learning transfer, we introduce two natural methods: {\bf Naive} and {\bf Oracle}.
+Both in the two baselines, we transfer a given learning trajectory $(\theta_1^0,\cdots,\theta_1^T)$ by a single permutation $\pi_{\naive}$ or $\pi_{\oracle}$, according to the problem formulation in Section~\ref{section:problem formulation}.
+In the Naive baseline, we define $\pi_{\naive}$ as the identity permutation, which satisfies $\pi_{\naive} \theta = \theta$.
+In other words, the transferred parameter by Naive is simply obtained as $\theta_{\transf,\pi_\naive}^t = \theta_\transf^0 + (\theta_\source^t - \theta_\source^0)$.
+On the other hand, in the Oracle baseline, we first obtain a true parameter $\theta_\transf^T$ by actually training the given initial parameter $\theta_\transf^0$ with the same optimizer as training of $\theta_\source^T$.
+Then we define $\pi_{\oracle}$ by minimizing the layer-wise $L^2$ distance between the actually trained trajectories $\theta_\transf^T-\theta_\transf^0$ and $\pi_\oracle(\theta_\source^T-\theta_\source^0)$, where we simply apply the coordinate descent as explained in Section~\ref{section:preliminaries:parameter alignment by permutation}.
+The Oracle baseline is expected to be close to the optimal solution for the learning transfer problem via permutation symmetry.
+
+\vspace{-3mm}
+\paragraph{Source trajectories.}
+
+In our experiments, as discussed in Section~\ref{section:additional techniques}, we consider to transfer linear trajectories $[\theta_\source^0:\theta_\source^T]$ of length $T$ rather than actual trajectories for $\theta_\source^T$ due to the storage cost and instability emerging from noise. The transferred results for actual trajectories instead of linear ones can be found in Appendix~\ref{appendix:section:learning transfer for actual trajectories}.
+%
+%
+%
+
+
+
+\subsection{Learning transfer experiments}\label{section:experiments:learning transfer}
+
+Figure~\ref{figure:transfer between random and pretrained inits} shows the validation accuracies of the transferred parameters $\theta_{\transf,\pi_t}^t$ for each timestep $t=1,\cdots,T$ during the transfer.
+For the baselines (Naive and Oracle), we set the $t$-th permutation $\pi_t$ by the fixed $\pi_\naive$ and $\pi_\oracle$ for every $t$.
+For our algorithms (GMT and FGMT), the $t$-th permutation $\pi_t$ corresponds to $\pi_s$ in Algorithm~\ref{algorithm:gradient matching along trajectory} and \ref{algorithm:fast gradient matching along trajectory}.
+
+In the upper figures \ref{figure: mnist with mlp}-\ref{figure: imagenet with resnet18}, we transfer a learning trajectory trained with a random initial parameter on a single dataset (MNIST~\citep{lecun2010mnist}, CIFAR-10~\citep{krizhevsky2009cifar10} and ImageNet~\citep{deng2009imagenet}) to another random initial parameter.
+We will refer to this experimental setting as the random initialization scenario.
+We can see that our methods successfully approximate the Oracle baseline.
+Also, we can see that FGMT, the fast approximation version of GMT, performs very similarly to or even outperforms GMT.
+This is probably because the update of $\pi_t$ affects the previously computed gradients in GMT, but not in FGMT, resulting in the stable behavior of FGMT.
+
+In the lower figures \ref{figure: cifar10 to cifar100}-\ref{figure: imagenet to cub}, we transfer a learning trajectory of fine-tuning on a specialized dataset (a $10$-classes subset of CIFAR-100~\citep{krizhevsky2009cifar10}, Stanford Cars~\citep{krause20133d} and CUB-200-2011~\citep{wah2011caltech}) from an initial parameter that is pre-trained on ImageNet to another pre-trained one.
+We refer to this experimental setting as the pre-trained initialization scenario.
+This scenario seems to be more difficult to transfer the learning trajectories than the random initialization scenario shown in the upper figures, since the Naive baseline always fails to transfer the trajectories.
+We can see that, while our methods behave closely to the Oracle baseline up to the middle of the timestep, the accuracy deteriorates immediately after that.
+Nevertheless, the peak accuracies of our methods largely outperform those of the Naive baseline.
+By stopping the transfer at the peak points (i.e., so-called early stopping), we can take an advantage of the transferred parameters as we will see in the next section.
+
+\begin{figure}
+  \centering
+  \begin{subfigure}[t]{0.24\textwidth}
+      \centering
+      \includegraphics[width=\textwidth]{resources/section_4-2_init-cifar10_conv8.pdf}
+      \caption{CIFAR-10 (Conv8)}\label{figure:fine-tuning on CIFAR-10 with transferred params}
+  \end{subfigure}
+  \hfill
+  \begin{subfigure}[t]{0.24\textwidth}
+      \centering
+      \includegraphics[width=\textwidth]{resources/section_4-2_cifar10-cifar100all_conv8.pdf}
+      \caption{CIFAR10$\to$CIFAR100}\label{figure:fine-tuning on CIFAR-100 with transferred params}
+  \end{subfigure}
+  \hfill
+  \begin{subfigure}[t]{0.24\textwidth}
+      \centering
+      \includegraphics[width=\textwidth]{resources/section_4-2_imagenet-cars_resnet18.pdf}
+      \caption{ImageNet $\to$ Cars}\label{figure:fine-tuning on Cars with transferred params}
+  \end{subfigure}
+  \hfill
+  \begin{subfigure}[t]{0.24\textwidth}
+      \centering
+      \includegraphics[width=\textwidth]{resources/section_4-2_imagenet-cub_resnet18.pdf}
+      \caption{ImageNet $\to$ CUB}\label{figure:fine-tuning on CUB with transferred params}
+  \end{subfigure}
+  \vspace{-2mm}
+  \caption{Subsequent training of the transferred parameters. In each figure, we plot the validation accuracies during the training of the transferred parameters, on the same dataset as the source trajectory being trained on. The transferred parameters obtained by solving the equation~(\ref{gradient matching problem}) can be trained faster than standard training, and Naive baseline in pre-trained initialization scenario. }\label{figure:fine-tuning of the transferred parameters}
+  \vspace{-3mm}
+\end{figure}
+
+
+\subsection{Accelerated training of transferred parameters}\label{section:experiments:acceleration}
+
+In the previous section, we obtained the transferred parameters that achieve non-trivial accuracy without any direct training.
+Here we evaluate how efficiently the transferred parameters can be trained in their subsequent training, by training them on the same dataset for same epochs as the source trajectory.
+We started each training from the transferred parameter $\theta_{\transf,\pi_t}^t$ at the best trajectory step $t$ in Figure~\ref{figure:transfer between random and pretrained inits}.
+Figure~\ref{figure:fine-tuning of the transferred parameters} shows the validation accuracies for each epoch in the training of the transferred parameters.
+In all cases, the transferred parameter can be trained faster than standard training from random/pre-trained initializations (denoted by \textbf{Standard Training}).
+In the random initialization scenario (\ref{figure:fine-tuning on CIFAR-10 with transferred params}), there seem almost no difference between four transfer methods.
+This is because the Naive baseline also achieves non-trivial accuracy already when transferred in this scenario.
+On the other hand, in the pre-trained scenarios (\ref{figure:fine-tuning on CIFAR-100 with transferred params}), (\ref{figure:fine-tuning on Cars with transferred params}), (\ref{figure:fine-tuning on CUB with transferred params}), the parameters transferred by our methods and the Oracle baseline learns the datasets faster than the parameters transferred by the Naive baseline.
+Thus the benefit of the transferred parameters seems to be greater especially in the pre-trained initialization scenario than in the random initialization scenario.
+
+
+\subsection{What is being inherited from target initialization?}\label{section:what is being inherited}
+
+In previous sections, we have observed that transferring a given learning trajectory to target initialization can achieve non-trivial accuracy beyond random guessing and indeed accelerate the subsequent training after transfer.
+Then the following question arises: what does the transferred parameter differ from the source parameter and inherit from the target initialization? In particular, pre-trained initializations may have their own "character" making them different from each other, due to their generalization ability or prediction mechanism.
+
+\paragraph{Basin in loss landscape.}
+
+In context of transfer learning,
+\citet{neyshabur2020being} empirically showed that fine-tuning one pre-trained initialization always leads to the same basin in loss landscape, which enables the fine-tuned models to share similar properties inherited from the same pre-trained initialization.
+From this viewpoint, the parameter that is transferred to a target pre-trained initialization and then fine-tuned (referred as \textbf{FGMT+FT}) is expected to arrive at the same basin as the actually fine-tuned parameter (referred as \textbf{Target}) from the same pre-trained initialization.
+In Figure~\ref{figure:inheritance of basin in loss landscape}, we empirically validate this expectation, with comparison to the source parameter permuted by Git Re-basin~\citep{ainsworth2023git} which is also designed to linearly mode connected to Target (referred as \textbf{Source (Permuted)}).
+We can see that the transferred parameter lives in the nearly same basin as the target one, while there are still mild barriers from the permuted source parameter.
+This implies that the transferred parameter inherits similar mechanism \citep{lubana2023mechanistic} from the target initialization  which cannot be obtained by simply permuting the source parameter.
+\vspace{-3mm}
+
+\begin{figure}
+    \centering
+    \begin{subfigure}[t]{0.32\textwidth}
+      \centering
+      \includegraphics[width=\textwidth]{resources/cifar100.scratch_trf_gr.pdf}
+      \vspace{-6mm}
+      \caption{CIFAR10$\to$CIFAR100}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[t]{0.32\textwidth}
+      \centering
+      \includegraphics[width=\textwidth]{resources/cars.scratch_trf_gr.pdf}
+      \vspace{-6mm}
+      \caption{ImageNet$\to$Cars}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[t]{0.32\textwidth}
+      \centering
+      \includegraphics[width=\textwidth]{resources/cub.scratch_trf_gr.pdf}
+      \vspace{-6mm}
+      \caption{ImageNet$\to$CUB}
+    \end{subfigure}
+    \vspace{-2mm}
+    \caption{Inheritance of basin in loss landscape. We plotted the validation accuracies over the $uv$-plane following the same protocol as \citet{garipov2018loss}. }\label{figure:inheritance of basin in loss landscape}
+    \vspace{-2mm}
+  \end{figure}
+  
+  \begin{figure}
+    \centering
+    \begin{subfigure}[t]{0.49\textwidth}
+      \begin{subfigure}[t]{0.49\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{resources/section_4-2_imagenetx0_1-cub_resnet18.pdf}
+      \end{subfigure}
+      \hfill
+      \begin{subfigure}[t]{0.49\textwidth}
+          \centering
+          \includegraphics[width=\textwidth]{resources/section_4-2_gengap_imagenetx0_1-cub_resnet18.pdf}
+        \end{subfigure}
+        \vspace{-6mm}
+        \caption{CUB}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[t]{0.49\textwidth}
+      \centering
+      \begin{subfigure}[t]{0.49\textwidth}
+        \includegraphics[width=\textwidth]{resources/section_4-2_imagenetx0_1-cars_resnet18.pdf}
+      \end{subfigure}
+      \hfill
+      \begin{subfigure}[t]{0.49\textwidth}
+        \includegraphics[width=\textwidth]{resources/section_4-2_gengap_imagenetx0_1-cars_resnet18.pdf}
+      \end{subfigure}
+      \vspace{-6mm}
+      \caption{Cars}
+    \end{subfigure}
+    \vspace{-3mm}
+    \caption{Inheritance of generalization ability. We plotted validation accuracies and generalization gaps between training and validation accuracies. }\label{figure:inheritance of generalization ability}
+    \vspace{-5mm}
+  \end{figure}
+
+\paragraph{Generalization ability.}
+In Figure~\ref{figure:inheritance of generalization ability}, unlike previous sections, we focus on the case that generalization ability of  source initialization $\theta_\source^0$ differs from target initialization $\theta_\transf^0$.
+In particular, we use the source initialization $\theta_\source^0$ pre-trained with $10\%$ of training data from ImageNet and the target initialization $\theta_\transf^0$ pre-trained on full ImageNet.
+The former (validation accuracy $\approx 50\%$) generalizes poorly than the latter (validation accuracy $\approx 72\%$).
+Surprisingly, the results show that (1) learning trajectories can be transferred between pre-trained initializations with different generalization ability, and (2) the transferred parameter successfully inherits the better generalization ability from the target initialization $\theta_\transf^0$ even when the source trajectory itself is trained from the poorly generalizing initialization $\theta_\source^0$.
+\vspace{-3mm}
+
+\section{Conclusion}\label{section:conclusion}
+\vspace{-2mm}
+
+In this work, we formulated the problem of how we can synthesize an unknown learning trajectory from the known one, named the learning transfer problem, and derived an algorithm that approximately solves it very efficiently.
+In our experiments, we confirmed that our algorithm efficiently transfers a given learning trajectory to achieve non-trivial accuracy without training, and that the transferred parameters accelerate their subsequent training.
+Moreover, we investigated what properties the transferred parameters inherit from the target initializations from the viewpoints of loss landscape and generalization.
+The last observation potentially opens up new paradigm of deep learning in future: For example, when a foundation model is newly updated with better generalization or fixed vulnerability, its fine-tuned models may efficiently follow it by transferring their fine-tuning trajectory from old foundation model to the new one.
+
+
+
+
+%

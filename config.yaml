@@ -372,7 +372,7 @@ mnist_mlp_sgd: &mnist_mlp_sgd
 
     hparams_grid:
         lr: [0.01]
-        width_factor: [0.125, 0.25, 0.5, 1.0, 2.0]  # dim=8, 16, 32, 64, 128
+        width_factor: [0.125, 0.25, 0.5, 1.0, 2.0, 64.0]  # dim=8, 16, 32, 64, 128, 4096
         seed: [101, 102]
 
 ########################################################
@@ -424,6 +424,51 @@ transfer_init-mnist_mlp_noperm: &transfer_init-mnist_mlp_noperm
         source_target_seeds: [[101, 102]]
 transfer_init-mnist_mlp_usetarget:
     <<: *transfer_init-mnist_mlp_noperm
+    baseline_no_perm: false
+    baseline_use_target: true
+
+########################################################
+#   Figure 9(a) — Real Trajectories (MNIST 2-MLP)
+########################################################
+
+transfer_init-mnist_mlp_finegrained: &transfer_init-mnist_mlp_finegrained
+    <<: *transfer_init-mnist_mlp
+    hparams_grid:
+        epoch_ft: [0]
+        lr_ft: [0.0]
+        gm_iters: [1]
+        checkpoint_epochs: ["list(range(-1, 15))"]
+        num_splits: [1]
+        split_scheduling_fn: ['1+math.cos((t/T)*math.pi)']
+        fast_perm_optim: [false]
+        source_target_seeds: [[101, 102]]
+
+transfer_init-mnist_mlp_finegrained_fast:
+    <<: *transfer_init-mnist_mlp_finegrained
+    hparams_grid:
+        epoch_ft: [0]
+        lr_ft: [0.0]
+        gm_iters: [1]
+        checkpoint_epochs: ["list(range(-1, 15))"]
+        num_splits: [1]
+        split_scheduling_fn: ['1+math.cos((t/T)*math.pi)']
+        fast_perm_optim: [true]
+        source_target_seeds: [[101, 102]]
+
+transfer_init-mnist_mlp_finegrained_noperm: &transfer_init-mnist_mlp_finegrained_noperm
+    <<: *transfer_init-mnist_mlp_finegrained
+    baseline_no_perm: true
+    hparams_grid:
+        epoch_ft: [0]
+        lr_ft: [0.0]
+        gm_iters: [1]
+        checkpoint_epochs: ["list(range(-1, 15))"]
+        num_splits: [1]
+        split_scheduling_fn: ['1+math.cos((t/T)*math.pi)']
+        source_target_seeds: [[101, 102]]
+
+transfer_init-mnist_mlp_finegrained_usetarget:
+    <<: *transfer_init-mnist_mlp_finegrained_noperm
     baseline_no_perm: false
     baseline_use_target: true
 
@@ -777,6 +822,12 @@ section_4_3_cifar10_conv8:
 
 section_4_1_mnist_mlp_figure5a:
     <<: *transfer_init-mnist_mlp
+    allowed_commands: ['plot']
+    hparams_grid:
+        seed: [1]
+
+figure_9a_mnist_mlp:
+    <<: *transfer_init-mnist_mlp_finegrained
     allowed_commands: ['plot']
     hparams_grid:
         seed: [1]

@@ -1,0 +1,455 @@
+\renewcommand{\thefootnote}{\fnsymbol{footnote}}
+
+\begin{appendix}
+
+\section{Validating Assumption (P) at initialization}\label{appendix:validating assumption at initialization}
+
+In this section, we theoretically validate Assumption (P) in Section~\ref{section:algorithm} for $2$-layered ReLU neural network at initialization.
+Let $d$ be the dimension of inputs $x=(x_j)_{j=1,\cdots,d} \in \mathbb{R}^d$, and $f_{w,v}(x) := \sum_{i=1}^N v_i \sigma(\sum_{j=1}^d w_{ij} x_j)$ be a ReLU neural network\footnote{We can ignore the non-differentiable locus of the network because we only consider expected gradients over a distribution with a continuous density function, where such low-dimensional locus has zero measure. } with $N$ hidden neurons, where $w=(w_{ij})\in\mathbb{R}^{N\times d}, v=(v_i)\in\mathbb{R}^N$, $\sigma(z) := \max(z, 0)$.
+
+We assume that the input $x\in\mathbb{R}^d$ and its label $y\in\mathbb{R}$ is sampled from some bounded distribution $\mathcal{D}$ whose density function $p_\mathcal{D}(x,y)$ is continuous over $(x,y) \in \mathbb{R}^{d+1}$. The parameters $w$ and $v$ are initialized with Kaiming uniform initialization, i.e.,  $w \sim U(-\frac{1}{\sqrt{d}}, \frac{1}{\sqrt{d}})^{N\times d}$, $v\sim U(-\frac{1}{\sqrt{N}}, \frac{1}{\sqrt{N}})^{N}$.
+We employ the MSE loss $\mathcal{L}(y_1, y_2) := \frac{1}{2}|y_1 - y_2|^2$ and focus on the expected gradient $\mathbb{E}_{(x,y)\sim\mathcal{D}} [ \nabla_{(w, v)} \mathcal{L}(f_{w,v}(x), y) ]$ for this loss function at the initialization $w,v$.
+Here $\nabla_{(w, v)} \mathcal{L}(f_{w,v}(x), y)$ lives in $\mathbb{R}^{N\times d}\times \mathbb{R}^{d}$ which is obtained as a concatenation of two vectors $(\partial\mathcal{L}(f_{w,v}(x), y) / \partial w_{ij} : i\in\{1,\cdots,N\},j\in\{1\,\cdots,d\}) \in \mathbb{R}^{N\times d}$ and $(\partial\mathcal{L}(f_{w,v}(x), y) / \partial v_{i} : i\in\{1,\cdots,N\} ) \in\mathbb{R}^{N}$.
+Moreover, we introduce the following assumption on the data distribution $\mathcal{D}$ for technical reason:
+\begin{equation}\label{equation: assumption on distribution}
+  \Big|\mathbb{E}_{(x,y)\sim\mathcal{D}} \Big[ y \sigma\Big(\sum_{j} w_{ij} x_j\Big) \Big] \Big| \geq K \text{ for some } K > 0 \text{ with high probability w.r.t. } w_{ij},
+\end{equation}
+which is reasonable because it requires non-zero correlation between the input $x$ and its label $y$.
+
+To validate our assumption, we introduce normalized distance $\frac{\lVert v_1 - v_2\rVert_2}{\sqrt{\lVert v_1\rVert_2 \lVert v_2\rVert_2}}$ between two vectors $v_1$ and $v_2$, which can be considered as cosine distance when $\lVert v_1\rVert \approx \lVert v_2 \rVert_2$ holds.
+Now our claim is that the normalized distance of gradients at independent random initializations can be arbitrarily small by appropriate neuron-permutation and sufficient over-parameterization.
+In this sense, the following theorem validates Assumption (P) at random initializations:
+\begin{theorem}\label{appendix:theorem:validating assumption at initialization}
+    Under the above assumption, given two pairs of randomly initialized parameters $(w, v)$ and $(w', v')$, with high probability, there exists a permutation symmetry $\pi \in S_N$ such that the normalized distance between the expected gradients $\mathbb{E}_{(x,y)} [\nabla_{w,v} \mathcal{L}]$ and $\mathbb{E}_{(x,y)} [\nabla_{w'',v''} \mathcal{L}]$, where $(w'', v'')$ is the permuted parameter of $(w', v')$ with $\pi$, can be arbitrarily small when $N$ is sufficiently large.
+\end{theorem}
+\begin{proof}
+The expected gradient at $(w,v)$ can be computed as follows:
+
+\begin{eqnarray*}
+    \mathbb{E}_{(x,y)\sim\mathcal{D}}\left[ \frac{\partial \mathcal{L}(f_{w,v}(x), y)}{\partial w_{ij}} \right]
+     &=& \mathbb{E}\left[ (f_{w,v}(x) - y) \frac{\partial f_{w,v}(x)}{\partial w_{ij}} \right] \\
+     &=& v_i \mathbb{E}\left[ (f_{w,v}(x) - y) x_j \mathbbm{1}_{ \{\sum_{k}w_{ik}x_k > 0\} } \right], \\
+    \mathbb{E}_{(x,y)\sim\mathcal{D}}\left[ \frac{\partial \mathcal{L}(f_{w,v}(x), y)}{\partial v_{i}} \right]
+     &=& \mathbb{E}\left[ (f_{w,v}(x) - y) \frac{\partial f_{w,v}(x)}{\partial v_{i}} \right] \\
+     &=& \mathbb{E}\left[ (f_{w,v}(x) - y) \sigma\left(\sum_{j=1}^d w_{ij}x_j\right) \right] \\
+     &=& \mathbb{E}\left[ (f_{w,v}(x) - y) \left( \sum_{j=1}^d w_{ij}x_j \right)  \mathbbm{1}_{ \{\sum_{k}w_{ik}x_k > 0\} } \right] \\
+     &=& \sum_{j=1}^d w_{ij} \mathbb{E}\left[ (f_{w,v}(x) - y) x_j  \mathbbm{1}_{ \{\sum_{k}w_{ik}x_k > 0\} } \right]
+\end{eqnarray*}
+
+By Hoeffding's inequality and $v_i \sim U(-\frac{1}{\sqrt{N}}, \frac{1}{\sqrt{N}})$, with high probability, we can assume $f_{w,v}(x) \approx 0$ for sufficiently large $N$. Thus by letting $C^j(w_{i1},\cdots,w_{id}) := \mathbb{E}\left[ - y x_j  \mathbbm{1}_{ \{\sum_{k}w_{ik}x_k > 0\} } \right]$, we can simplify the expected gradients as follows:
+
+\begin{eqnarray*}
+    \mathbb{E}_{(x,y)\sim\mathcal{D}}\left[ \frac{\partial \mathcal{L}(f_{w,v}(x), y)}{\partial w_{ij}} \right] &=& v_i C^j(w_{i1},\cdots,w_{id}), \\
+    \mathbb{E}_{(x,y)\sim\mathcal{D}}\left[ \frac{\partial \mathcal{L}(f_{w,v}(x), y)}{\partial v_{i}} \right] &=& \sum_{j=1}^d w_{ij} C^j(w_{i1},\cdots,w_{id}),
+\end{eqnarray*}
+
+which are also valid for the counterpart $(w', v')$ instead of  $(w, v)$.
+
+Next, we take a permutation $\pi \in S_N$ by applying Lemma~\ref{lemma: existence of permutation} to $(d+1)$-dimensional random vectors $(\sqrt{d}w_{i1},\cdots,\sqrt{d}w_{id},\sqrt{N}v_i)$ and $(\sqrt{d}w'_{i1},\cdots,\sqrt{d}w'_{id},\sqrt{N}v'_i) \sim U([-1,1]^{d+1})$ where $i=1,\cdots,N$.
+Let $w'' := (w'_{\pi(i)j})_{ij}$ and $v'':=(v'_{\pi(i)})_{i}$.
+Then we want to evaluate the squared normalized distance between $\mathbb{E} [ \nabla_{(w,v)} \mathcal{L} ]$ and $\mathbb{E} [ \nabla_{(w'',v'')} \mathcal{L} ]$:
+\begin{eqnarray}\label{equation: normalized distance with permutation}
+    \frac{ \left\lVert \mathbb{E} [ \nabla_{(w,v)} \mathcal{L} ] -  \mathbb{E} [ \nabla_{(w'',v'')} \mathcal{L} ] \right\rVert^2_2 }{ \left\lVert \mathbb{E} [ \nabla_{(w,v)} \mathcal{L} ]  \right\rVert_2 \left\lVert \mathbb{E} [ \nabla_{(w'',v'')} \mathcal{L} ]\right\rVert_2  }
+\end{eqnarray}
+
+We can evaluate each factor $\left\lVert \mathbb{E} [ \nabla_{(w,v)} \mathcal{L} ] -  \mathbb{E} [ \nabla_{(w'',v'')} \mathcal{L} ] \right\rVert^2_2$, $\left\lVert \mathbb{E} [ \nabla_{(w,v)} \mathcal{L} ] \right\rVert_2$, $\left\lVert \mathbb{E} [ \nabla_{(w',v')} \mathcal{L} ] \right\rVert_2$ in Eq~(\ref{equation: normalized distance with permutation}) as follows:
+
+Claim (1): $ \left\lVert \mathbb{E} [ \nabla_{(w,v)} \mathcal{L} ] -  \mathbb{E} [ \nabla_{(w'',v'')} \mathcal{L} ] \right\rVert^2_2 = O(N\varepsilon^2) + o(N) $ with high probability.
+
+Claim (2): $ \left\lVert \mathbb{E} [ \nabla_{(w,v)} \mathcal{L} ] \right\rVert_2^2  = \Omega(N), \ \left\lVert \mathbb{E} [ \nabla_{(w',v')} \mathcal{L} ] \right\rVert_2^2  = \Omega(N)$ with high probability.
+
+\vspace{2mm}
+
+\underline{Proof of Claim (1)}: 
+Let $I := \{i\in\{1,\cdots,N\} : |w_{ij} - w''_{ij}| \leq \sqrt{d}\varepsilon, |v_{i} - v''_{i}| \leq \sqrt{N}\varepsilon \}$.  We have
+\begin{eqnarray}
+    \left\lVert \mathbb{E} [ \nabla_{(w,v)} \mathcal{L} ] -  \mathbb{E} [ \nabla_{(w'',v'')} \mathcal{L} ] \right\rVert^2_2  \nonumber
+    &=& \sum_{i,j} \left| v_i C^j(w_{i*}) - v''_i C^j(w_{i*}'') \right|^2  \nonumber \\ 
+    & & + \sum_i \Big| \sum_j w_{ij}C^j(w_{i*}) - w_{ij}''C^j(w''_{i*}) \Big|^2 \nonumber \\
+    &\leq& \sum_{i=1}^N\sum_{j=1}^d \Big(\big|v_i - v''_i\big|\cdot\big|C^j(w_{i*})\big| + \big|v_i''\big|\cdot\big|C^j(w_{i*})-C^j(w''_{i*}))\big| \Big)^2 \nonumber \\
+    & & + \sum_i \Big| \sum_j w_{ij}C^j(w_{i*}) - w_{ij}''C^j(w''_{i*}) \Big|^2 \nonumber \\
+    &\leq& \sum_{i\in I}\sum_{j=1}^d \Big(\big|v_i - v''_i\big|\cdot\big|C^j(w_{i*})\big| + \big|v_i''\big|\cdot\big|C^j(w_{i*})-C^j(w''_{i*}))\big| \Big)^2 \nonumber \\
+    & & + \sum_{i\in I} \Big| \sum_j w_{ij}C^j(w_{i*}) - w_{ij}''C^j(w''_{i*}) \Big|^2 \nonumber \\
+    & & + O(|I^c|), \label{inequality: evaluation of normalized distance}
+\end{eqnarray}
+where $I^c$ stands for the complement $\{1,\cdots,N\}\setminus I$. By Lemma~\ref{lemma: existence of permutation}, the size of the complement $|I^c|$ is upper bounded by $O(\sqrt{N})$.
+Also we note that $C^j$ is bounded by some constant since $\mathcal{D}$ is bounded, and $|v_j|, |v''_j| \leq 1/\sqrt{N}, |w_{ij}|, |w''_{ij}|\leq 1/\sqrt{d}$. Combining these facts and Lemma~\ref{lemma: evaluation of gradient at v_j} for the second term of (\ref{inequality: evaluation of normalized distance}), it follows that $(\ref{inequality: evaluation of normalized distance}) \leq O(N\varepsilon^2) + O(\sqrt{N})$.
+
+\underline{Proof of Claim (2)}: 
+\begin{eqnarray*}
+  \left\lVert \mathbb{E}_{(x,y)\sim\mathcal{D}} [ \nabla_{(w,v)} \mathcal{L} ] \right\rVert^2_2 
+  &\geq& \sum_{i=1}^N \Big| \mathbb{E} \Big[ \frac{\partial \mathcal{L}}{\partial v_i} \Big] \Big|^2 \\
+  &\approx& \sum_{i=1}^N \Big| \mathbb{E}_{(x,y)\sim\mathcal{D}} \Big[ y \sigma\big(\sum_{j=1}^d w_{ij}x_j\big) \Big] \Big|^2 \\
+  &\geq& KN.
+\end{eqnarray*}
+Here we used $f_{w,v}(x) \approx 0$ as explained above and the assumption Eq~(\ref{equation: assumption on distribution}) on distribution $\mathcal{D}$.
+
+Finally, by combining Claim~(1) and (2), we obtain that the normalized distance (Eq~\ref{equation: normalized distance with permutation}) converges to $C_1\varepsilon^2$ when $N\to\infty$, with some constant $C_1>0$, which can be arbitrarily small by controlling $\varepsilon$.
+\end{proof}
+
+\begin{lemma}\label{lemma: existence of permutation}
+Let $\varepsilon > 0$ be any small real number.
+Let $z_1, \cdots, z_N, z'_1, \cdots, z'_N, \sim U([-K, K]^{k})$ be i.i.d. uniform random variables where $K > 0$ is a fixed constant.
+When $N$ is sufficiently large, with high probability, there exists a permutation $\pi\in S^{N}$ such that the number of indices $i \in \{1,\cdots,N\}$ satisfying $|z_{ij}-z'_{\pi(i)j}| > \varepsilon$ for some $j$ is upper bounded by $O(\sqrt{N})$.
+\end{lemma}
+\begin{proof}
+We can assume $K=1$ without loss of generality by re-scaling $z_i$, $z'_i$ and $\varepsilon$.
+Here we follow the argument given in \citet{entezari2021role}.
+For simplicity, we take $M\in\mathbb{N}$ satisfying $\frac{1}{M} \leq \varepsilon \leq \frac{1}{M-1}$.
+For each $\mathbf{l} = (l_1,\cdots,l_k) \in L := \{1, \cdots, 2M\}^{k}$, we consider 
+\begin{align*}
+& Q_{\mathbf{l}} := (-1+\frac{l_1-1}{M},-1+\frac{l_1}{M})\times\cdots\times(-1+\frac{l_k-1}{M},-1+\frac{l_k}{M}), \\
+& n_{\mathbf{l}} := \# \{ i\in I : z_i \in Q_{\mathbf{l}} \}, \ \ \ n'_{\mathbf{l}} := \# \{ i\in I : z'_i \in Q_{\mathbf{l}} \}.
+\end{align*}
+Note that any $z_i$ and $z'_i$ are contained in $Q_{\mathbf{l}}$ for some $\mathbf{l}\in L$ with probability $1$.
+For each $\mathbf{l}\in L$, 
+the number $n_{\mathbf{l}}$ and $n'_{\mathbf{l}}$ can be considered as the sum of random binary variables $b_1 + \cdots + b_N$ where each $b_j$ is sampled from Bernoulli distribution $\mathrm{Ber}(\frac{1}{M})$.
+By Hoeffding's inequality for the Bernoulli random variables, we have
+\begin{equation*}
+  \mathbf{P}\left( \Big| n_{\mathbf{l}} - \frac{N}{M} \Big| \geq t  \right) \leq 2 \exp \left( -\frac{t^2}{2N} \right)
+\end{equation*}
+for each $\mathbf{l}\in L$. Thus, with probability $1-\delta$, we obtain
+\begin{equation*}
+\Big| n_{\mathbf{l}} - \frac{N}{M} \Big|, \Big| n'_{\mathbf{l}} - \frac{N}{M} \Big| \geq \sqrt{2N\log \left( \frac{4 |L|}{\delta} \right)}.
+\end{equation*}
+
+To construct the desired correspondence $\pi$ between $(z_i : 1\leq i \leq N)$ and $(z'_j: 1\leq j \leq N)$, each $z_i \in Q_\mathbf{l}$ should be mapped to some $z'_j \in  Q_\mathbf{l}$.
+The number of $\{ i\in \{1, \cdots, N\} : z_i \text{ does not have its counterpart } z'_j \}$ can be upper bounded by
+\begin{equation*}
+  \sum_{\mathbf{l}\in L} \big|n_{\mathbf{l}} - n'_{\mathbf{l}} \big|
+    \leq \sum_{\mathbf{l}\in L} \left|n_{\mathbf{l}} - \frac{N}{M}\right| + \left|n'_{\mathbf{l}} - \frac{N}{M}\right|
+    \leq 2|L| \sqrt{2N\log \left( \frac{4 |L|}{\delta} \right)} = O(\sqrt{N}).
+\end{equation*}
+\end{proof}
+
+\begin{lemma}\label{lemma: evaluation of gradient at v_j}
+  Assume that $(w_1,\cdots,w_d), (w'_1,\cdots,w'_d) \in \big[-\frac{1}{\sqrt{d}}, \frac{1}{\sqrt{d}}\big]^d$ satisfy $\sup_k |w_k-w'_k|\leq \varepsilon$. It follows that
+  $\big| \sum_j w_{j}C^j(w_1,\cdots, w_d) - \sum_j w'_j C^j(w'_1, \cdots, w'_d) \big| \leq O(\varepsilon)$.
+\end{lemma}
+\begin{proof}
+Let $G(w_1,\cdots,w_d) := \sum_j w_{j}C^j(w_1,\cdots, w_d)=\mathbb{E}[-y\sigma(\sum_j w_j x_j)]$. By applying triangle inequality iteratively, we have
+\begin{eqnarray*}
+  & & |G(w_1,\cdots,w_d) - G(w'_1,\cdots,w'_d)| \\
+  &\leq& |G(w_1,\cdots,w_d) - G(w'_1,w_2,\cdots,w_d)| + |G(w'_1,w_2,\cdots,w_d) - G(w'_1,\cdots,w'_d)| \\
+  &\leq& \cdots \\
+  &\leq& |G(w_1,\cdots,w_d) - G(w'_1,w_2,\cdots,w_d)| + \cdots + |G(w'_1,\cdots,w'_d,w_d) - G(w'_1,\cdots,w'_d)|
+\end{eqnarray*}
+
+Thus the proof can be reduced to the case where $|w_{k_0} - w'_{k_0}| \leq \varepsilon$ for some $k_0$ and $w_j=w'_j$ for $k\not=k_0$. We can assume $k_0=1$ and $w_1 \leq w'_1 \leq w_1 +  \varepsilon$ without loss of generality. Then we have
+\begin{eqnarray}
+  & & \big| G(w_1,\cdots,w_d) - G(w'_1,\cdots,w'_d) \big| \nonumber \\
+ &=& \Big| \mathbb{E}\Big[ -y\sigma\Big(\sum_j w_{j} x_j\Big) \Big] - \mathbb{E}\Big[ -y\sigma\Big(\sum_j w'_{j} x_j\Big) \Big] \Big| \nonumber \\
+ &=& \Big| \mathbb{E}\Big[ y \Big\{ \sigma\Big(\sum_j w_{j} x_j\Big) - \sigma\Big(\sum_j w'_{j} x_j\Big) \Big\} \Big] \Big| \nonumber \\
+ &\leq& \int |y|\cdot \Big|\Big\{ \sigma\Big(w_1 x_1 + \sum_{j=2}^d w_{j} x_j\Big) - \sigma\Big(w'_1 x_1 + \sum_{j=2}^d w_{j} x_j\Big) \Big\}\Big| \cdot p(x,y)dxdy \nonumber \\
+ &\leq& \int |y|\cdot \Big| w_1 x_1 + \sum_{j=2}^d w_{j} x_j \Big| \cdot \mathbbm{1}_{ \{ w_1x_1 + \sum_{j=2}^d w_jx_j \geq 0, w'_1x_1 + \sum_{j=2}^d w_jx_j < 0 \} }  \cdot p(x,y)dxdy \nonumber \\
+ & & +  \int |y|\cdot \Big| w'_1 x_1 + \sum_{j=2}^d w_{j} x_j \Big| \cdot \mathbbm{1}_{ \{ w_1x_1 + \sum_{j=2}^d w_jx_j < 0, w'_1x_1 + \sum_{j=2}^d w_jx_j \geq 0 \} } \cdot p(x,y)dxdy \nonumber \\
+ & & +  \int |y|\cdot \Big|  \Big(w_1 x_1 + \sum_{j=2}^d w_{j} x_j\Big) - \Big(w'_1 x_1 + \sum_{j=2}^d w_{j} x_j\Big)  \Big| \cdot p(x,y)dxdy \label{inequality: evaluation of gradient at v_j}
+\end{eqnarray}
+On the first term of the last inequality~(\ref{inequality: evaluation of gradient at v_j}), since $w'_1x_1 + \sum_{j=2}^d w_jx_j < 0$ holds on the integrated region, it follows that $0\leq w_1x_1 + \sum_{j=2}^d w_jx_j < w_1x_1 - w'_1x_1$. Thus we have 
+\begin{eqnarray*}
+  & & \int |y|\cdot \Big| w_1 x_1 + \sum_{j=2}^d w_{j} x_j \Big| \cdot \mathbbm{1}_{ \{ w_1x_1 + \sum_{j=2}^d w_jx_j \geq 0, w'_1x_1 + \sum_{j=2}^d w_jx_j < 0 \} }  \cdot p(x,y)dxdy \\
+  &\leq&  \int |y|\cdot |w_1x_1 - w'_1x_1| \cdot p(x,y)dxdy \leq \int |y|\cdot \varepsilon |x_1| \cdot p(x,y)dxdy \\
+\end{eqnarray*}
+The same argument holds for the second term of inequality~(\ref{inequality: evaluation of gradient at v_j}). Furthermore, the third term is also bounded by $\int |y|\cdot \varepsilon |x_1| \cdot p(x,y)dxdy$.
+Therefore, by the boundedness of the distribution $\mathcal{D}$, we have $(\ref{inequality: evaluation of gradient at v_j}) \leq 3\varepsilon \int |yx_1| p(x,y)dxdy = O(\varepsilon)$.
+\end{proof}
+
+
+
+
+\section{Proof of Lemma~\ref{lemma:consistency of subproblems}}
+
+In this section, we employ the same notation as Section~\ref{section:algorithm}.
+We assume that
+\begin{enumerate}
+\item $\lVert (\theta_i^{t+1} - \theta_i^{t}) - (-\alpha_t\nabla_{\theta_i^t} \mathcal{L}) \rVert_2  < \varepsilon$,
+\item $\lVert \pi_s \nabla_{\theta_1^t}\mathcal{L} - \nabla_{\theta^t_{2,\pi_{s-1}}} \mathcal{L} \rVert_2 < \varepsilon$, for $t\leq s-1$,
+\item The gradient $\nabla_\theta\mathcal{L}$ is $K$-Lipschitz continuous with respect to the parameter $\theta$, i.e., $\lVert \nabla_\theta\mathcal{L}-\nabla_{\theta'}\mathcal{L} \rVert_2 \leq K \lVert \theta - \theta'\rVert_2$.
+\end{enumerate}
+
+\begin{lemma}
+Under the above assumptions, we have
+\begin{equation}
+    \theta^{t}_{2,\pi_{s'}} - \theta^t_{2,\pi_{s}}  = O(T^{s'} K^{s'} \varepsilon),
+\end{equation}
+for $0\leq t \leq s < s' \leq T$.
+\end{lemma}
+\begin{proof}
+We prove by induction:
+\begin{align*}
+\theta^{t}_{2,\pi_{s'}} &= \theta_2^0 + \pi_{s'} (\theta_1^t - \theta_1^0) \\
+                        &= \theta^0_2 + \pi_{s'} \left( -\sum_{t'=0}^{t-1} \alpha_{t'}\nabla_{\theta_1^{t'}} \mathcal{L} + O(t \varepsilon) \right)  & \text{(by Assumption 1.)}  \\
+                        &= \theta^0_2 + \sum_{t'=0}^{t-1}  \left(- \alpha_{t'} \pi_{s'} \nabla_{\theta_1^{t'}}\mathcal{L} \right) + O(t\varepsilon) \\
+                        &= \theta^0_2 + \sum_{t'=0}^{t-1} \left(- \alpha_{t'} \nabla_{\theta^{t'}_{2, \pi_{s'-1}}}\mathcal{L} + O(\varepsilon) \right) + O(t\varepsilon) & \text{(by Assumption 2.)} \\
+                        &= \theta_2^0 + \sum_{t'=0}^{t-1} \left(- \alpha_{t'}  \nabla_{\theta^{t'}_{2, \pi_{s-1}}+O(T^{s'-1}K^{s'-1}\varepsilon)}\mathcal{L} + O(\varepsilon) \right) + O(t\varepsilon) & \text{(by induction hypothesis.)}\\
+                        &= \theta_2^0 + \sum_{t'=0}^{t-1} \left(- \alpha_{t'} \nabla_{\theta^{t'}_{2, \pi_{s-1}}}\mathcal{L} \right) +O(T^{s'}K^{s'}\varepsilon) & \text{(by Assumption 3.)}\\
+                        &= \theta_2^0 + \pi_{s}\left( - \sum_{t'=0}^{t-1} \alpha_{t'} \nabla_{\theta^{t'}_1}\mathcal{L} \right) +O(T^{s'}K^{s'}\varepsilon) \\
+                        &= \theta_2^0 + \pi_{s}\left( \theta_1^{t} - \theta_1^0 \right) +O(T^{s'}K^{s'}\varepsilon) \\
+                        &= \theta^t_{2,\pi_s} +O(T^{s'}K^{s'}\varepsilon).
+\end{align*}
+
+\end{proof}
+
+
+\section{Related Work}\label{appendix:related works}
+
+\paragraph{Loss landscape, linear mode connectivity, permutation symmetry.}
+
+Loss landscape of training deep neural network has been actively studied in an effort to unravel mysteries of non-convex optimization in deep learning~\citep{hochreiter1997flat,choromanska2015loss,lee2016gradient,keskar2017onlargebatch,li2018visualizing}.
+One of the mysteries in deep learning is the stability and consistency of their training processes and solutions, despite of the multiple sources of randomness such as random initialization, data ordering and data augmentation~\citep{fort2019deep,bhojanapalli2021reproducibility,summers2021nondeterminism,jordan2023calibrated}.
+Previous studies of mode connectivity both theoretically~\citep{freeman2017topology,simsek2021geometry} and empirically~\citep{draxler2018essentially,garipov2018loss} demonstrate the existence of low-loss curves between any two optimal solutions trained independently with different randomness.
+
+Linear mode connectivity (LMC) is a special case of mode connectivity where two optimal solutions are connected by a low-loss linear path~\citep{nagarajan2019uniform,frankle2020linear,mirzadeh2021linear,entezari2021role,benzing2022random,ainsworth2023git,juneja2023linear,lubana2023mechanistic}.
+In this line of research, \citet{entezari2021role} observed that even two solutions trained from different random initialization can be linearly connected by an appropriate permutation symmetry.
+\citet{ainsworth2023git} developed an efficient method to find such permutations, and \citet{jordan2023repair} extends it to NN architectures with Batch normalization~\citep{ioffe2015batch}.
+Their observations strength the expectation on some sort of similarity between two training processes even from different random initializations, via permutation symmetry.
+In our work, based on these observations, we attempt to transfer one training process to another initial parameter by permutation symmetry.
+
+Another line of research related to our work is the studies of monotonic linear interpolation (MLI) between an initialization and its trained result.
+\citet{goodfellow2015qualitatively} first observed that the losses are monotonically decreasing along the linear path between an initial parameter and the trained one.
+\citet{frankle2020revisiting} and \citet{lucas2021onmonotonic} confirmed that the losses are monotonically non-increasing even with modern network architectures such as CNNs and ResNets~\citep{he2016deep}.
+\citet{vlaar2022can} empirically analyzed which factor in NN training influences the shape of the non-increasing loss curve along the linear interpolation, and \citet{wang2023plateau} theoretically analyzed the plateau phenomenon in the early phase of the linear interpolation.
+Motivated by these observations, we introduced the notion of linear trajectories in Section~\ref{section:additional techniques} to reduce storage costs in our learning transfer.
+
+\vspace{-1mm}
+\paragraph{Model editing.}
+
+Our approach of transferring learning trajectories can be also considered as a kind of model editing~\citep{sinitsin2020editable,santurkar2021editing,ilharco2022patching,ilharco2023editing} in the parameter space because we modify a given initial parameter by adding an appropriately permuted trajectory.
+In particular, a recent work by \citet{ilharco2023editing} is closely related to our work.
+They proposed to arithmetically edit a pre-trained NN with a task vector, which is defined by subtracting the initial pre-trained parameter from the parameter fine-tuned on a specific task.
+From our viewpoint, task vectors can be seen as one-step learning trajectories (i.e., learning trajectories with $T=1$).
+Model merging (or model fusion)~\citep{singh2020model,matena2022merging,wortsman2022model,li2023branchtrainmerge} is also related in the sense of the calculation in the parameter space.
+%
+%
+
+\vspace{-1mm}
+\paragraph{Efficient training for multiple NNs.}
+There are several literatures that attempt to reduce the computation costs in training multiple NNs.
+Fast ensemble is an approach to reduce the cost in ensemble training by cyclically scheduled learning rate~\citep{huang2017snapshot} or by searching different optimal basins in loss landscape~\citep{garipov2018loss,fort2019deep,wortsman2021learning,benton2021loss}.
+A recent work by \citet{liu2022knowledge} leverages knowledge distillation~\citep{hinton2015distilling} from one training to accelerate the subsequent trainings.
+Our approach differs from theirs in that we try to establish a general principle to transfer learning trajectories.
+Also, the warm-starting technique investigated by \citet{ash2020warm} seems to be related in that they subsequently train from a once trained network.
+There may be some connection between their and our approaches, which remains for future work.
+
+\vspace{-1mm}
+\paragraph{Gradient matching.}
+
+The gradient information obtained during training has been utilized in other areas outside of ours.
+For example, in dataset distillation, \citet{zhao2021dataset} optimized a distilled dataset by minimizing layer-wise cosine similarities between gradients on the distilled dataset and the real one, starting from random initial parameters, which leads to similar training results on those datasets.
+Similarly, \citet{yin2021see} successfully recovered private training data from its gradient by minimizing the distance between gradients.
+In contrast to their problem where input data is optimized, our problem requires optimizing unknown transformation for NN parameters.
+In addition, our problem requires matching the entire learning trajectories, which are too computationally expensive to be computed naively.
+
+
+
+\section{Details for our experiments}\label{appendix:details on experiments}
+
+\subsection{Datasets}
+
+The datasets used in our experiments (Section~\ref{section:experiments}) are listed below. For all datasets, we split the officially given training dataset into 9:1 for training and validation.
+
+\begin{itemize}
+    \item {\bf MNIST.} \ \ MNIST~\citep{lecun2010mnist} is a dataset of $28\times 28$ images of hand-written digits, which is available under the  terms of the CC BY-SA 3.0 license.
+    \item {\bf CIFAR-10, CIFAR100.} \ \  CIFAR-10 and CIFAR-100~\citep{krizhevsky2009cifar10} are datasets of $32\times 32$ images with $10$ and $100$ classes respectively.
+    \item {\bf ImageNet.} \ \ ImageNet~\citep{deng2009imagenet} is a large-scale dataset of images with $1000$ classes, which is provided for non-commercial research or educational use.
+    \item {\bf Stanford Cars.} \ \ Stanford Cars~\citep{krause20133d} is a dataset of images with 196 classes of cars, which is provided for
+    research purposes. We refer to this dataset as Cars for short.
+    \item {\bf CUB-200-2011.}  \ \ CUB-200-2011~\citep{wah2011caltech} is a dataset of images of 200 species of birds. We refer to this dataset as CUB for shot.
+\end{itemize}
+
+\subsection{Network architectures}
+
+The neural network architectures used in our experiments (Section~\ref{section:experiments}) are listed as follows:
+
+
+\begin{itemize}
+    \item {\bf 2-MLP.} \ \ 2-MLP is a two-layered neural network with the ReLU activations. The design of this architecture is shown in Table~\ref{app:table:architecture of 2-MLP}.
+    \item {\bf Conv8.} \ \ Conv8 is an $8$-layered CNN followed by three linear and ReLU layers. The design of this architecture is shown in Table~\ref{app:table:architecture of Conv8}.
+    \item {\bf ResNet-18.} \ \ The ResNet family~\citep{he2016deep} is a series of deep CNNs with skip connections. We employed the standard $18$-layered one for ResNet-18.
+\end{itemize}
+
+\begin{table}[h]
+    \caption{The architecture of 2-MLP.}
+    \label{app:table:architecture of 2-MLP}
+    \centering
+    \begin{tabular}{cll}
+        \toprule
+        No. & Layers
+            &  Output dimensions \\
+        \midrule
+        1 & Flattening & $784 \ (=28\times 28)$
+        \\
+        2 & Linear $\to$ ReLU
+        & $4096$
+        \\
+        4 & Linear
+        & $10$
+        \\
+        5 & Softmax
+        & $10$
+        \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\begin{table}[h]
+\caption{The architecture of Conv8.}
+\label{app:table:architecture of Conv8}
+\centering
+\begin{tabular}{cl}
+    \toprule
+    No. & Layers \\
+    \midrule
+    1 & Conv(input=$3$, output=$64$, kernel\_size=$(3,3)$, stride=$1$, padding=$1$) $\to$ ReLU \\
+    2 & Conv(input=$64$, output=$64$, kernel\_size=$(3,3)$, stride=$1$, padding=$1$) $\to$ ReLU \\
+    3 & MaxPooling(kernel\_size=(2, 2)) \\
+    4 & Conv(input=$64$, output=$128$, kernel\_size=$(3,3)$, stride=$1$, padding=$1$) $\to$ ReLU \\
+    5 & Conv(input=$128$, output=$128$, kernel\_size=$(3,3)$, stride=$1$, padding=$1$) $\to$ ReLU \\
+    6 & MaxPooling(kernel\_size=(2, 2)) \\
+    7 & Conv(input=$128$, output=$256$, kernel\_size=$(3,3)$, stride=$1$, padding=$1$) $\to$ ReLU \\
+    8 & Conv(input=$256$, output=$256$, kernel\_size=$(3,3)$, stride=$1$, padding=$1$) $\to$ ReLU \\
+    9 & MaxPooling(kernel\_size=(2, 2)) \\
+    10 & Conv(input=$256$, output=$512$, kernel\_size=$(3,3)$, stride=$1$, padding=$1$) $\to$ ReLU \\
+    11 & Conv(input=$512$, output=$512$, kernel\_size=$(3,3)$, stride=$1$, padding=$1$) $\to$ ReLU \\
+    12 & MaxPooling(kernel\_size=(4, 4)) \\
+    13 & Conv(input=$512$, output=$512$, kernel\_size=$(3,3)$, stride=$1$, padding=$1$) $\to$ ReLU \\
+    14 & Linear(input=$512$, output=$256$) $\to$ ReLU \\
+    15 & Linear(input=$256$, output=$256$) $\to$ ReLU \\
+    16 & Linear(input=$512$, output=$10$) \\
+    17 & Softmax
+    \\
+    \bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Training details}
+
+\subsubsection{Details on implementation and devices}
+
+We implemented the codebase for all experiments in Python 3 with the PyTorch library~\citep{paszke2019pytorch}.
+Our computing environment is a machine with $12$ Intel CPUs, $140$ GB CPU memory and a single A100 GPU.
+
+\subsubsection{Training of source trajectories}
+In training for source trajectories, we used SGD with momentum in PyTorch for the optimization.
+It has the following hyperparameters: the total epoch number $E$, batch size $B$, learning rate $\alpha$, weight decay $\lambda$, momentum coefficient $\mu$.
+We used the cosine annealing~\citep{loshchilov2017sgdr} for scheduling the learning rate $\eta$ except for MNIST.
+For the random initialization, we used the standard Kaiming initialization~\citep{he2015delving}, which is also a default in PyTorch.
+The details on the hyperparameters are as follows:
+\begin{itemize}
+    \item {\bf 2-MLP on MNIST.} \ \  We used $E=15$, $B=128$, $\alpha=0.01$, $\lambda=0.0$, $\mu=0.9$.
+    \item {\bf Conv8 on CIFAR-10.} \ \ We used $E=60$, $B=128$, $\alpha=0.05$, $\lambda=0.0001$, $\mu=0.9$.
+    \item {\bf Conv8 on CIFAR-100.} \ \ We used $E=30$, $B=128$, $\alpha=0.05$, $\lambda=0.0001$, $\mu=0.9$, starting from the pre-trained parameter on CIFAR-10.
+    \item {\bf ResNet18 on ImageNet.} \ \  We used $E=100$, $B=128$, $\alpha=0.1$, $\lambda=0.0001$, $\mu=0.9$. For the first $5$ epochs, we gradually increased the learning rate as $\eta = 0.1 \times (i/5)$ for each $i$-th epoch ($i=1,\cdots,5$). For the last $95$ epochs, we decayed the learning rate by cosine annealing starting from $\eta = 0.1$.
+    \item {\bf ResNet18 on Cars.} \ \  We used $E=30$, $B=128$, $\alpha=0.1$, $\lambda=0.0001$, $\mu=0.9$, starting from the pre-trained parameter on ImageNet.
+    \item {\bf ResNet18 on CUB.} \ \ We used $E=30$, $B=128$, $\alpha=0.1$, $\lambda=0.0001$, $\mu=0.9$, starting from the pre-trained parameter on ImageNet.
+\end{itemize}
+
+\subsubsection{Hyperparameters for transferring learning trajectories}
+
+Our methods (Algorithm~\ref{algorithm:gradient matching along trajectory},~\ref{algorithm:fast gradient matching along trajectory}) have the following hyperparameters: the length $T$ of learning trajectories, the batch size $B$ for each gradient matching. Also, for NN architectures with the Batch normalization~\citep{ioffe2015batch} such as ResNets, the batch size $B'$ for resetting the means and variances in the Batch Normalization layers~\citep{jordan2023repair} is also a hyperparameter.
+
+\begin{itemize}
+    \item {\bf 2-MLP on MNIST.} \ \  We used $B=128$ and $T=5$.
+    \item {\bf Conv8 on CIFAR-10.} \ \ We used $B=128\times 2$ and $T=30$.
+    \item {\bf Conv8 on CIFAR-100.} \ \ We used $B=128\times 2$ and $T=15$.
+    \item {\bf ResNet18 on ImageNet.} \ \  We used $B=128\times 100$, $B'=128 \times 20$ and $T=40$.
+    \item {\bf ResNet18 on Cars.} \ \  We used $B=128\times 5$, $B'=128\times 2$ and $T=15$.
+    \item {\bf ResNet18 on CUB.} \ \ We used $B=128\times 5$, $B'=128\times 2$ and $T=15$.
+\end{itemize}
+
+\subsubsection{Computational cost of GMT/FGMT}\label{appendix: computational cost}
+
+Total computational cost of FGMT (resp. GMT) consists of:  computing $2BT$ (resp. $2BT^2$) gradients, which is the same budget as $2T$ iterations of standard training, and solving lightweight (depending on model architecture, typically $1$ or $2$ seconds in our environment) optimizations (eq.~\ref{eq:linear sub-problems}) for $T$ times.
+Thus, for FGMT, the required computational cost should be significantly smaller than standard training (if implemented optimally).
+
+
+\subsubsection{Subsequent training of transferred parameters}
+For the subsequent training in Section~\ref{section:experiments:acceleration}, we used the same optimizer and learning rate scheduler as training of source trajectories, with slightly small initial learning rates ($\alpha = 0.01$ on CIFAR-10, $\alpha = 0.05$ on CIFAR-100, $\alpha = 0.05$ on Cars, $\alpha = 0.01$ for CUB), which are selected based on the validation accuracy of Naive baseline for fair comparison.
+
+\newpage
+
+
+\section{Additional experimental results}
+
+
+\subsection{Learning transfer for actual trajectories}\label{appendix:section:learning transfer for actual trajectories}
+
+\begin{figure}[H]
+  \centering
+  \begin{subfigure}[t]{0.325\textwidth}
+      \centering
+      \includegraphics[width=\textwidth]{resources/section_4-1_init-mnist_mlp_actual.pdf}
+      \caption{MNIST (2-MLP)}
+  \end{subfigure}
+  \hfill
+  \begin{subfigure}[t]{0.325\textwidth}
+      \centering
+      \includegraphics[width=\textwidth]{resources/section_4-1_init-cifar10_conv8_actual.pdf}
+      \caption{CIFAR-10 (Conv8)}
+  \end{subfigure}
+  \hfill
+  \begin{subfigure}[t]{0.325\textwidth}
+      \centering
+      \includegraphics[width=\textwidth]{resources/section_4-1_init-imagenet_resnet18_actual.pdf}
+      \caption{ImageNet (ResNet-18)}
+  \end{subfigure}
+  \vskip\baselineskip
+  \begin{subfigure}[t]{0.325\textwidth}
+      \centering
+      \includegraphics[width=\textwidth]{resources/section_4-1_imagenet-cars_resnet18_actual.pdf}
+      \caption{ImageNet $\to$ Cars}
+  \end{subfigure}
+  \begin{subfigure}[t]{0.325\textwidth}
+      \centering
+      \includegraphics[width=\textwidth]{resources/section_4-1_imagenet-cub_resnet18_actual.pdf}
+      \caption{ImageNet $\to$ CUB}
+  \end{subfigure}
+  \begin{subfigure}[t]{0.325\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{resources/section_4-1_cifar10-cifar100all_conv8_actual.pdf}
+    \caption{CIFAR-10 $\to$ CIFAR-100}
+  \end{subfigure}
+\caption{We plot the validation accuracies of the transferred parameter $\theta_{\transf,\pi_t}^t$ for each timestep $t=1,\cdots,T$ with various datasets and NN architectures as in Figure~\ref{figure:transfer between random and pretrained inits}, except that the actual trajectory $\theta_\source^t$ at $t$-th epoch of SGD is transferred instead of linear trajectories. Compared to the results for linear trajectories in Figure~\ref{figure:transfer between random and pretrained inits}, the transferred results for actual trajectories tend to have more variance in validation accuracy and fail to transfer in fine-tuning scenario. }
+  \vspace{-1mm}
+\end{figure}
+
+\subsection{Ensemble evaluation}
+
+\begin{table}[H]
+  \centering
+  \resizebox{0.7\columnwidth}{!}{
+  \begin{tabular}{lccc}
+    \toprule
+      & GMT
+      & FGMT
+      & Full Ensemble
+      \\
+    \midrule
+    CIFAR-10
+    & $92.01$ (@50ep)
+    & $92.11$ (@50ep)
+    & $\mathbf{92.26}$ (@60ep)
+    \\
+    CIFAR-100
+    & $\mathbf{70.41}$ (@50ep)
+    & $69.53 $ (@50ep)
+    & $69.81 $ (@60ep)
+    \\
+    Cars 
+    & $86.83 $ (@20ep)
+    & $86.61 $ (@20ep)
+    & $\mathbf{87.10} $ (@30ep)
+    \\
+    CUB 
+    & $74.71 $ (@10ep)
+    & $\mathbf{75.62}$ (@10ep)
+    & $74.02$ (@30ep)
+    \\
+    \bottomrule
+  \end{tabular}
+  }
+  \caption{We evaluate ensembles of the transferred models with fewer subsequent training epochs than training from scratch. "@ X ep" means that each member of the ensembles are trained for X epochs after transferred (for GMT/FGMT) or from scratch (for Full Ensemble). }
+  \label{table:common hyperparameters}
+\end{table}
+
+\end{appendix}

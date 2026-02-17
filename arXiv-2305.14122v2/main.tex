@@ -1,0 +1,137 @@
+\documentclass{article}
+%
+
+\usepackage{iclr2024_conference,times}
+
+
+\usepackage[utf8]{inputenc} %
+\usepackage[T1]{fontenc}    %
+\usepackage{hyperref}       %
+\usepackage{url}            %
+\usepackage{booktabs}       %
+\usepackage{amsfonts}       %
+\usepackage{nicefrac}       %
+\usepackage{microtype}      %
+\usepackage{hyperref}       %
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    citecolor=blue,
+    urlcolor=magenta,
+}
+
+%
+%
+\usepackage[toc,page]{appendix}
+\usepackage{ulem}
+\usepackage{mathtools}    %
+\usepackage{bbm}    %
+\usepackage{textcomp}    %
+%
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{wrapfig}
+\usepackage{bm}
+\usepackage{multirow}
+\usepackage{diagbox}
+\usepackage{float}
+\usepackage{fixltx2e}
+
+\usepackage{graphicx}
+%
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+%
+\usepackage[colorinlistoftodos]{todonotes}
+\usepackage{subcaption}
+\usepackage{enumitem}
+\usepackage{tablefootnote}
+\usepackage{comment}
+
+
+
+\newenvironment{proof}[1][Proof]{\paragraph{#1:}}{\hfill$\square$\vspace{4pt}}
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{corollary}[theorem]{Corollary}
+\newtheorem{lemma}[theorem]{Lemma}
+
+\DeclarePairedDelimiter\ceil{\lceil}{\rceil}
+\DeclarePairedDelimiter\floor{\lfloor}{\rfloor}
+\newcommand{\headline}[1]{{\bf \underline{#1.}} \ \  }
+\newcommand{\wt}{\widetilde}
+\newcommand{\ol}{\overline}
+\newcommand{\frob}{{\rm Frob}}
+\newcommand{\target}{\mathrm{target}}
+\newcommand{\randomize}{{\texttt{Randomize}}}
+\newcommand{\trainmask}{{\texttt{TrainMask}}}
+\newcommand{\iterand}{{\texttt{IteRand}}}
+\newcommand{\bernoulli}{{\mathrm{Bernoulli}}}
+\newcommand{\calculatemask}{{\texttt{CalculateMask}}}
+\newcommand{\updatescore}{{\texttt{UpdateScore}}}
+\newcommand{\param}{\mathrm{param}}
+\newcommand{\score}{\mathrm{score}}
+\newcommand{\fanin}{\mathrm{fanin}}
+\newcommand{\SGD}{\mathrm{SGD}}
+\newcommand{\period}{\mathrm{per}}
+\newcommand{\labeled}{\mathrm{labeled}}
+\newcommand\bigzero{\makebox(0,0){\text{\huge0}}}
+\newcommand{\vect}[1]{\ensuremath{\mathbf{#1}}}
+\newcommand{\MAML}{\mathrm{MAML}}
+\newcommand{\MT}{\mathrm{MT}}
+\newcommand{\train}{\mathrm{tr}}
+\newcommand{\test}{\mathrm{val}}
+\newcommand{\que}{\mathord{?}}   
+\newcommand{\init}{\mathrm{init}}
+\newcommand{\source}{{1}}
+\newcommand{\transf}{{2}}
+\newcommand{\inp}{\mathrm{in}}
+\newcommand{\out}{\mathrm{out}}
+\newcommand{\naive}{{\texttt{naive}}}
+\newcommand{\oracle}{{\texttt{oracle}}}
+
+%
+%
+%
+\usepackage{amsmath}
+\DeclareMathOperator*{\argmin}{arg\,min}
+
+\newcommand{\maxpool}{\mbox{{\rm max-pool}}}
+\newcommand{\avgpool}{\mbox{{\rm avg-pool}}}
+\newcommand{\eqtext}{\mbox{{\rm Eq.}}}
+\newcommand{\myfootref}[1]{\textsuperscript{\ref{#1}}}
+
+
+\title{Transferring Learning Trajectories \\ of Neural Networks}
+
+\iclrfinalcopy
+\author{Daiki Chijiwa\thanks{Corresponding author: \texttt{daiki.chijiwa@ntt.com}} \\
+NTT Computer and Data Science Laboratories, NTT Corporation
+}
+
+
+\begin{document}
+
+
+\maketitle
+
+
+\begin{abstract}
+
+\input{abstract.tex}
+
+\end{abstract}
+
+\input{body.tex}
+
+%
+
+\bibliographystyle{iclr2024_conference}
+\bibliography{references}
+
+\newpage
+\begin{appendices}
+\input{appendix_body.tex}
+\end{appendices}
+
+\end{document}
