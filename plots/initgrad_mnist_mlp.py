@@ -1,3 +1,14 @@
+"""
+SCRIPT: Visualisation des gradients initiaux (Assumption P - alignment des gradients)
+
+Phases principales:
+1. Charger les états initiaux (epoch-1) de deux modèles avec seeds différents
+2. Extraire les gradients des deux modèles
+3. Matcher les neurones cachés entre les deux modèles via Hungarian algorithm
+4. Calculer la similarité cosinus des gradients (bruts vs permutés)
+5. Tracer et afficher les résultats
+"""
+
 # plots/initgrad_mnist_mlp.py
 
 import os
@@ -13,18 +24,23 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
+# ===================================================================
+# PHASE 1: FONCTIONS UTILITAIRES
+# ===================================================================
 
+
+# --------------------------
+# Helpers pour appels de fonction
+# --------------------------
 
 def _call_with_supported_kwargs(fn, **kwargs):
-    """Call fn with only the kwargs it supports."""
+    """Appelle fn avec uniquement les kwargs qu'elle supporte"""
     sig = inspect.signature(fn)
     kept = {k: v for k, v in kwargs.items() if k in sig.parameters}
     return fn(**kept)
 
 def _unwrap_learner(ret):
-    """
-    get_learner may return a tuple (learner, ...). We want the object that has .model.
-    """
+    """Extrait le learner de la valeur retournée par get_learner"""
     if hasattr(ret, "model"):
         return ret
     if isinstance(ret, (list, tuple)):
@@ -33,9 +49,12 @@ def _unwrap_learner(ret):
                 return x
     raise TypeError(f"Could not find a learner-like object with .model in return value of get_learner: {type(ret)}")
 
+# --------------------------
+# Helpers pour accès au répertoire
+# --------------------------
 
 def _get_out_dir(cfg, outman, prefix):
-    # Try a few common OutputManager APIs; fallback to cfg["output_dir"].
+    """Récupère le répertoire de sortie de l'OutputManager"""
     for name in ["get_dir", "get_output_dir", "get_exp_dir", "get_prefix_dir"]:
         if hasattr(outman, name) and callable(getattr(outman, name)):
             try:
@@ -47,7 +66,12 @@ def _get_out_dir(cfg, outman, prefix):
                     pass
     return cfg.get("output_dir", "__outputs__")
 
+# --------------------------
+# Extractions et calculs mathématiques
+# --------------------------
+
 def _flatten_grads(grads_dict):
+    """Applatit un dictionnaire de gradients en vecteur unique"""
     vecs = []
     for k in sorted(grads_dict.keys()):
         g = grads_dict[k]
@@ -59,26 +83,31 @@ def _flatten_grads(grads_dict):
     return torch.cat(vecs, dim=0)
 
 def _cosine(a, b, eps=1e-12):
+    """Calcule la similarité cosinus entre deux vecteurs"""
     a = a.float()
     b = b.float()
     return float((a @ b) / (a.norm() * b.norm() + eps))
 
+# --------------------------
+# Inférence de l'architecture MLP
+# --------------------------
+
 def _infer_mlp_keys_from_state_dict(sd):
-    """
-    Heuristic: pick the two linear weight matrices by shape.
-    For 2-layer MLP: W1 is (H, D), W2 is (C, H).
+    """Identifie W1 (H,D) et W2 (C,H) dans le state_dict du MLP
+    
+    Heuristique: cherche deux matrices de poids 2D où W2.shape[1] == W1.shape[0]
     """
     weight_keys = [k for k in sd.keys() if k.endswith("weight")]
-    # collect (key, shape)
+    # Collecter les matrices 2D par (key, shape)
     items = [(k, tuple(sd[k].shape)) for k in weight_keys]
-    # pick candidates where len(shape)==2
+    # Filtrer pour garder seulement les matrices 2D
     items = [(k, s) for k, s in items if len(s) == 2]
     if len(items) < 2:
         raise RuntimeError(f"Could not find two linear weights in state_dict keys: {list(sd.keys())[:20]} ...")
-    # sort by first dim descending (hidden usually largest)
+    # Trier par première dimension décroissante (couche cachée usuellement plus grande)
     items_sorted = sorted(items, key=lambda x: x[1][0], reverse=True)
 
-    # try every pair to satisfy W2 second dim equals W1 first dim
+    # Chercher la paire (W1, W2) satisfaisant W2.shape[1] == W1.shape[0]
     for k1, s1 in items_sorted:
         for k2, s2 in items_sorted:
             if k1 == k2:
@@ -87,7 +116,7 @@ def _infer_mlp_keys_from_state_dict(sd):
             if s2[1] == H:  # (C, H)
                 w1 = k1
                 w2 = k2
-                # biases: replace 'weight' by 'bias' if exists
+                # Trouver les biais associés si ils existent
                 b1 = w1[:-6] + "bias"
                 b2 = w2[:-6] + "bias"
                 if b1 not in sd: b1 = None
@@ -95,13 +124,16 @@ def _infer_mlp_keys_from_state_dict(sd):
                 return w1, b1, w2, b2
     raise RuntimeError("Could not infer (W1,W2) pair for 2-layer MLP from state_dict shapes.")
 
+# --------------------------
+# Matching Hungarian pour poids initiaux
+# --------------------------
+
 def _hungarian_perm_from_weights(sd1, sd2):
-    """
-    Build permutation of hidden units to align sd1 to sd2.
-    We use a feature vector per hidden unit that includes:
-      - incoming weights + bias (row of W1, b1)
-      - outgoing weights (column of W2)
-    Then solve assignment maximizing dot-product similarity.
+    """PHASE 2: Construit la permutation des neurones cachés
+    
+    Aligne sd1 vers sd2 en maximisant la similarité des features des neurones:
+      - Features = [W1_row, b1, W2_col]
+    Résout le problème d'assignement via Hungarian algorithm.
     """
     w1k, b1k, w2k, b2k = _infer_mlp_keys_from_state_dict(sd1)
 
@@ -115,25 +147,27 @@ def _hungarian_perm_from_weights(sd1, sd2):
     W2a = sd1[w2k].detach().cpu()  # (C, H)
     W2b = sd2[w2k].detach().cpu()
 
-    # features per hidden unit: [W1_row, b1, W2_col]
+    # Construire les features de chaque neurone: [W1_row, b1, W2_col]
     Fa = torch.cat([W1a, b1a[:, None], W2a.t()], dim=1).numpy()  # (H, D+1+C)
     Fb = torch.cat([W1b, b1b[:, None], W2b.t()], dim=1).numpy()
 
-    # similarity matrix S_ij = <Fa_i, Fb_j>
+    # Matrice de similarité S_ij = <Fa_i, Fb_j>
     S = Fa @ Fb.T
-    # assignment wants min cost => use -S
+    # Hungarian veut min cost => utiliser -S
     row_ind, col_ind = linear_sum_assignment(-S)
-    # permutation p such that unit i in A maps to unit p[i] in B
+    # permutation p telle que neurone i dans A mapé vers neurone p[i] dans B
     p = np.empty(H, dtype=np.int64)
     p[row_ind] = col_ind
     return p, (w1k, b1k, w2k, b2k)
 
 def _apply_perm_to_grads(grads, p, keys):
-    """
-    Apply hidden permutation to grads of a 2-layer MLP:
-      - grad W1: permute rows
-      - grad b1: permute entries
-      - grad W2: permute columns (because W2 is (C, H))
+    """Applique la permutation π aux gradients d'un MLP 2-couches
+    
+    Permutation:
+      - grad W1: permute les LIGNES
+      - grad b1: permute les entrées
+      - grad W2: permute les COLONNES (car W2 est (C, H))
+      - grad b2: inchangé
     """
     w1k, b1k, w2k, b2k = keys
     p_t = torch.as_tensor(p, dtype=torch.long, device=grads[w1k].device)
@@ -189,6 +223,7 @@ def _get_any_train_loader(learner, cfg):
     )
 
 def _get_loss_fn(learner):
+    """Récupère la fonction de loss du learner"""
     for name in ["criterion", "loss_fn", "loss", "get_loss"]:
         if hasattr(learner, name):
             obj = getattr(learner, name)
@@ -199,6 +234,10 @@ def _get_loss_fn(learner):
     return None
 
 def _compute_grads_on_one_batch(learner, device, cfg):
+    """Calcule les gradients sur un batch d'entraînement
+    
+    Utilisé pour obtenir les gradients initiaux à epoch-1
+    """
     model = learner.model
     model.train()
 
@@ -233,12 +272,22 @@ def _compute_grads_on_one_batch(learner, device, cfg):
         grads[name] = None if p.grad is None else p.grad.detach().clone()
     return grads, float(loss.detach().cpu())
 
+# ===================================================================
+# PHASE 3: FONCTION PRINCIPALE
+# ===================================================================
 
 def initgrad_mnist_mlp(cfg, outman, prefix, gpu_id):
-    """
-    Assumption (P) sanity check at initialization:
-    cosine similarity between gradients of two independently initialized models,
-    with and without a hidden-unit permutation (2-layer MLP case).
+    """Test d'alignement des gradients initiaux (Assumption P)
+    
+    Calcule la similarité cosinus entre les gradients de deux modèles
+    initialisés indépendamment, avec et sans permutation des neurones cachés
+    (cas MLP 2-couches).
+    
+    Étapes:
+    1. Créer deux modèles avec seeds différents (epoch-1)
+    2. Calculer les gradients sur un batch
+    3. Matcher les neurones et appliquer la permutation
+    4. Calculer et tracer la similarité cosinus
     """
     # CPU-friendly: force cuda off unless explicitly available and requested
     use_cuda = bool(cfg.get("use_cuda", False)) and torch.cuda.is_available()

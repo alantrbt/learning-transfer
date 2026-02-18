@@ -94,7 +94,7 @@ cifar100_split5:
 
 mlp:
     class: 'MLP'
-    default_width: 64
+    default_width: 2
 mlp1024:
     class: 'MLP'
     default_width: 1024
@@ -138,8 +138,8 @@ resnet101:
 __default__: &__default__
 
     # General Setting
-    num_workers: 4
-    use_cuda: True
+    num_workers: 8
+    use_cuda: False
     output_dir: '__outputs__'
     dataset_dir: '__data__'
     sync_dir: '__sync__'
@@ -491,32 +491,44 @@ cifar100-1_conv8_sgd: &cifar100-1_conv8_sgd
 mnist_mlp_sgd: &mnist_mlp_sgd
     <<: *__default__
     allowed_commands: [train]
-    checkpoint_epochs: "list(range(-1, 20))"
 
     dataset.config_name: 'mnist'
     model.config_name: 'mlp'
 
+    # CPU
+    use_cuda: false
+    num_gpus: 0
+    num_workers: 4
+
+    # En pratique on garde epoch=10, mais on coupe au budget via max_iters
     epoch: 10
     batch_size: 128
     optimizer: "SGD"
-    #lr_scheduler: "CustomCosineLR"
     lr_scheduler: null
     warmup_epochs: 0
     weight_decay: 0.0
 
+    # Sauvegarde init (epoch-1) utile
+    checkpoint_epochs: [-1]
+
+    # NOUVEAU: checkpoints en itérations (Figure 3a: θ^t = params après 10*t iters)
+    checkpoint_iters: "list(range(0, 5001, 10))"   # 0,10,20,...,5000
+    max_iters: 5000                                 # budget CPU (≈ 10-11 epochs MNIST @ bs=128)
+
     hparams_grid:
         lr: [0.01]
-        #width_factor: [1.0, 4.0, 16.0, 64.0, 256.0]
-        width_factor: [64.0]  # dim=4096
+        width_factor: [4, 8, 16, 32, 64, 128]
         seed: [101,102,201,202,301,302]
-initgrad_mnist_mlp:
+
+mnist_mlp_sgd_w832:
     <<: *mnist_mlp_sgd
-    allowed_commands: [plot]
-    output_prefix_hashing: true
     hparams_grid:
-        lr: [0.0]
-        normalized_matching: [false]
-        source_target_seeds: [[101, 102]]
+        lr: [0.01]
+        width_factor: [8.0, 32.0]
+        seed: [101,102,201,202,301,302]
+
+
+
 
 ########################################################
 #   Command: synced_transfer
@@ -556,4 +568,25 @@ synced_transfer_init-cifar10_conv4_truegrad:
 synced_transfer_init-cifar10_conv4_random:
     <<: *synced_transfer_init-cifar10_conv4
     use_random_perm: true
+
+
+# Assumption (P) - Gradient alignment over training (MNIST / MLP)
+
+gradcurve_mnist_mlp:
+    <<: *mnist_mlp_sgd
+    allowed_commands: [plot]
+    output_prefix_hashing: true
+
+    # IMPORTANT: Figure 3a = iters, pas epochs
+    # Les checkpoints vont jusqu'à iter4220 (max_iters=5000 mais s'arrête plus tôt)
+    compare_iterations: "list(range(10, 4230, 10))"   # t=1..422 (de iter10 à iter4220)
+    compare_per: 10                                   # 10 iters entre checkpoints (cohérent avec ci-dessus)
+
+    lr: 0.01
+    width_factor: [4, 8, 16, 32, 64, 128]
+    source_target_seeds: [[101, 102], [201, 202], [301, 302]]
+
+    hparams_grid:
+        normalized_matching: [false]
+
 
